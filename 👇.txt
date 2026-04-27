@@ -1,0 +1,43 @@
+👇
+
+🪑 Furniture Product + Brand List
+🪑 Chairs
+Office Chair → Nilkamal
+Plastic Chair → Nilkamal
+Revolving Chair → Godrej
+Dining Chair → IKEA
+🪟 Tables
+Study Table → IKEA
+Dining Table → Durian
+Center Table → Urban Ladder
+Computer Table → Godrej
+🛏️ Beds
+Single Bed → Godrej
+Double Bed → Durian
+Hydraulic Bed → Urban Ladder
+🛋️ Sofa
+Sofa Set → Durian
+Recliner Sofa → Urban Ladder
+Sofa Cum Bed → IKEA
+📦 Storage
+Wardrobe → Godrej
+Cupboard → Nilkamal
+TV Unit → IKEA
+Bookshelf → Urban Ladder
+🏪 Local Brand (Best for Project 👍)
+
+Jo tu real life jevu banavvu hoy to aa pan use kar:
+
+Wooden Bed → Local Furniture
+Dining Table → Rajkot Furniture
+Sofa Set → Shree Ram Furniture
+Cupboard → Krishna Furniture
+🎯 Final Use (Direct Entry)
+
+Tu database ma aa rite entry kari sakey:
+
+Product	Brand
+Office Chair	Nilkamal
+Wooden Table	Local
+Sofa Set	Durian
+Wardrobe	Godrej

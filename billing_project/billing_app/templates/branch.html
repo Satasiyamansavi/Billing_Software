@@ -1,0 +1,119 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="container-fluid">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="fw-bold">🏢 Branch Management</h3>
+
+        <input type="text" id="search" 
+               class="form-control w-auto" 
+               placeholder="Search Branch...">
+    </div>
+
+    <div class="card shadow border-0 mb-4">
+        <div class="card-body">
+            <h5 class="mb-3">➕ Add Branch</h5>
+
+            <form method="post" class="row g-2">
+                {% csrf_token %}
+
+                <div class="col-md-10">
+                    <input type="text" name="name" 
+                           class="form-control" 
+                           placeholder="Enter Branch Name" required>
+                </div>
+
+                <div class="col-md-2">
+                    <button class="btn btn-primary w-100">
+                        <i class="fas fa-plus"></i> Add
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card shadow border-0">
+        <div class="card-body p-0">
+
+            <table class="table table-hover mb-0 align-middle" id="table">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-3">Branch Name</th>
+                        <th class="text-center">Action</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for b in data %}
+                    <tr>
+                        <td class="ps-3 fw-medium">{{ b.name }}</td>
+
+                        <td class="text-center">
+                            <div class="d-flex justify-content-center gap-2">
+
+                                <a href="{% url 'branch_edit' b.id %}" 
+                                   class="btn btn-outline-primary btn-sm rounded-circle action-btn"
+                                   title="Edit">
+                                    <i class="fas fa-pen"></i>
+                                </a>
+
+                                <a href="{% url 'branch_delete' b.id %}" 
+                                   class="btn btn-outline-danger btn-sm rounded-circle action-btn"
+                                   title="Delete"
+                                   onclick="return confirm('Are you sure you want to delete this branch?');">
+                                    <i class="fas fa-trash"></i>
+                                </a>
+
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="2" class="text-center text-muted p-3">
+                            No branches found
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+
+            </table>
+
+        </div>
+    </div>
+
+</div>
+
+<script>
+document.getElementById("search").addEventListener("keyup", function() {
+    let value = this.value.toLowerCase();
+    let rows = document.querySelectorAll("#table tbody tr");
+
+    rows.forEach(row => {
+        let name = row.children[0].innerText.toLowerCase();
+        row.style.display = name.includes(value) ? "" : "none";
+    });
+});
+</script>
+
+<style>
+.action-btn {
+    width: 35px;
+    height: 35px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: 0.2s;
+}
+
+.action-btn:hover {
+    transform: scale(1.15);
+}
+
+input:focus {
+    box-shadow: none !important;
+    border-color: #007bff;
+}
+</style>
+
+{% endblock %}

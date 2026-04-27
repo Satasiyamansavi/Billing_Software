@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<h3 class="mb-4">🤖 AI Demand Prediction</h3>
+
+<style>
+.card-box {
+    border-radius: 12px;
+    padding: 20px;
+    background: #fff;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+    transition: 0.3s;
+}
+
+.card-box:hover {
+    transform: translateY(-5px);
+}
+
+.title {
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.stock {
+    font-size: 14px;
+    color: gray;
+}
+
+.prediction {
+    font-size: 22px;
+    font-weight: bold;
+}
+
+.badge-ok {
+    background: #28a745;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+}
+
+.badge-alert {
+    background: #dc3545;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+}
+</style>
+
+<div class="row">
+
+{% for p in predictions %}
+<div class="col-md-4 mb-4">
+    <div class="card-box">
+
+        <div class="title">{{ p.name }}</div>
+        <div class="stock">Stock: {{ p.stock }}</div>
+
+        <div class="prediction mt-2">
+            {{ p.prediction }}
+        </div>
+
+        <div class="mt-2">
+            {% if p.stock < p.prediction %}
+                <span class="badge-alert">Restock Needed</span>
+            {% else %}
+                <span class="badge-ok">Stock OK</span>
+            {% endif %}
+        </div>
+
+    </div>
+</div>
+{% endfor %}
+
+</div>
+
+{% endblock %}

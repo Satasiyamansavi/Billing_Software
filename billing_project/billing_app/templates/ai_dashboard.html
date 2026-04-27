@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<h2 class="mb-4">🤖 AI Dashboard</h2>
+
+<div class="row mb-4">
+
+    <div class="col-md-4">
+        <div style="background:#007bff; color:white; padding:20px; border-radius:10px;">
+            <h5>Total Products</h5>
+            <h2>{{ predictions|length }}</h2>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div style="background:#dc3545; color:white; padding:20px; border-radius:10px;">
+            <h5>Stock Alerts</h5>
+            <h2>
+                {% for p in predictions %}
+                    {% if p.stock < p.prediction %}1{% endif %}
+                {% endfor %}
+            </h2>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div style="background:#28a745; color:white; padding:20px; border-radius:10px;">
+            <h5>Status</h5>
+            <h2>Active</h2>
+        </div>
+    </div>
+
+</div>
+
+<div class="mb-4 p-3 bg-white shadow rounded">
+    <h5>⚠️ Stock Alerts</h5>
+
+    <ul>
+        {% for p in predictions %}
+            {% if p.stock < p.prediction %}
+                <li style="color:red;">
+                    {{ p.name }} → Restock Needed
+                </li>
+            {% endif %}
+        {% empty %}
+            <li>No alerts</li>
+        {% endfor %}
+    </ul>
+</div>
+
+<div class="p-3 bg-white shadow rounded">
+    <h5>🔥 Top Demand Products</h5>
+
+    {% for p in predictions|dictsortreversed:"prediction"|slice:":3" %}
+        <p>
+            <b>{{ p.name }}</b> → {{ p.prediction }}
+        </p>
+    {% endfor %}
+</div>
+
+<div class="p-3 bg-white shadow rounded mt-4">
+    <h5>📦 Auto Reorder Suggestions</h5>
+
+    {% for a in alerts %}
+        <p>
+            <b>{{ a.name }}</b> → Order <b>{{ a.required }}</b> units
+        </p>
+    {% empty %}
+        <p>No reorder needed</p>
+    {% endfor %}
+</div>
+{% endblock %}

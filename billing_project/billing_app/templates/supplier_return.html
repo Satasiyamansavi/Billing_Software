@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<h3>Supplier Ledger</h3>
+
+<table class="table table-bordered">
+<tr>
+    <th>Supplier</th>
+    <th>Total Purchase</th>
+</tr>
+
+{% for d in data %}
+<tr>
+    <td>{{ d.supplier }}</td>
+    <td>₹{{ d.total }}</td>
+</tr>
+{% endfor %}
+
+</table>
+
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<h3 class="mb-4">🧾 Barcode Billing</h3>
+
+<div class="card shadow border-0 mb-4">
+    <div class="card-body">
+
+        <form method="post" class="d-flex">
+            {% csrf_token %}
+            <input type="text" name="barcode" 
+                   class="form-control me-2"
+                   placeholder="Scan Barcode..."
+                   autofocus required>
+
+            <button class="btn btn-primary">
+                <i class="fas fa-search"></i>
+            </button>
+        </form>
+
+    </div>
+</div>
+
+{% if product %}
+<div class="card shadow border-0 mb-4">
+    <div class="card-body">
+
+        <h4 class="fw-bold">{{ product.name }}</h4>
+        <p class="mb-1">Price: ₹{{ product.price }}</p>
+
+        <span class="badge 
+            {% if product.stock > 0 %}bg-success{% else %}bg-danger{% endif %}">
+            {% if product.stock > 0 %}In Stock{% else %}Out of Stock{% endif %}
+        </span>
+
+    </div>
+</div>
+{% endif %}
+
+{% if cart %}
+<div class="card shadow border-0">
+    <div class="card-body p-0">
+
+        <table class="table table-hover mb-0">
+            <thead class="table-dark">
+                <tr>
+                    <th>Product</th>
+                    <th>Qty</th>
+                    <th>Price</th>
+                    <th>Total</th>
+                </tr>
+            </thead>
+
+            <tbody>
+            {% for item in cart %}
+            <tr>
+                <td>{{ item.name }}</td>
+                <td>{{ item.qty }}</td>
+                <td>₹{{ item.price }}</td>
+                <td>₹{{ item.total }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+
+    </div>
+</div>
+
+<div class="card shadow mt-3">
+    <div class="card-body text-end">
+        <h4>Total: ₹{{ grand_total }}</h4>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}

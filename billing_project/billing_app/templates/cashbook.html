@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<h3 class="mb-4">💰 Cashbook</h3>
+
+<input type="text" id="search" class="form-control mb-3" placeholder="Search Customer...">
+
+<div class="card shadow">
+    <div class="card-body p-0">
+
+        <table class="table table-hover mb-0" id="table">
+            <thead class="table-dark">
+                <tr>
+                    <th>Date</th>
+                    <th>Customer</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+
+            <tbody>
+            {% for p in payments %}
+            <tr>
+                <td>{{ p.date }}</td>
+                <td>{{ p.customer }}</td>
+
+                <td>
+                    <span class="fw-bold text-success">
+                        ₹{{ p.amount }}
+                    </span>
+                </td>
+
+                <td>
+                    <span class="badge bg-success">Received</span>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="4" class="text-center p-3">No Cash Data</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+
+        </table>
+
+    </div>
+</div>
+
+<script>
+document.getElementById("search").addEventListener("keyup", function() {
+    let value = this.value.toLowerCase();
+    let rows = document.querySelectorAll("#table tbody tr");
+
+    rows.forEach(row => {
+        let name = row.children[1].innerText.toLowerCase();
+        row.style.display = name.includes(value) ? "" : "none";
+    });
+});
+</script>
+
+{% endblock %}

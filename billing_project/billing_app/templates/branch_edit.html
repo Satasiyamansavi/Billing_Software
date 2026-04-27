@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<h3>Edit Branch</h3>
+
+<form method="post" class="card p-3">
+    {% csrf_token %}
+
+    <input type="text" name="name" class="form-control mb-2"
+           value="{{ branch.name }}">
+
+    <button class="btn btn-primary">Update</button>
+</form>
+
+<a href="{% url 'branch' %}" class="btn btn-secondary mt-2">
+    Back
+</a>
+
+{% endblock %}

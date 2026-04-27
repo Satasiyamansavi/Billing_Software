@@ -1,0 +1,1117 @@
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required
+from django.db.models import Sum, F
+from django.db.models.functions import TruncDate
+from django.http import HttpResponse
+from io import BytesIO
+from django.contrib.auth.decorators import user_passes_test
+from .models import Dealer, DealerOrder, DealerOrderItem, Product
+from .utils.common import amount_in_words
+from .models import Invoice, InvoiceItem
+
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet
+from .utils.einvoice import generate_einvoice_json, generate_irn
+from .utils.ewaybill import generate_ewaybill_data
+import json
+from .models import *
+from .forms import *
+import urllib.parse
+
+
+def is_admin(user):
+    return hasattr(user, 'userprofile') and user.userprofile.role == 'Admin'
+
+def is_dealer(user):
+    return hasattr(user, 'userprofile') and user.userprofile.role == 'Dealer'
+
+def is_staff(user):
+    return hasattr(user, 'userprofile') and user.userprofile.role == 'Staff'
+
+def is_dealer_or_admin(user):
+    return hasattr(user, 'userprofile') and user.userprofile.role in ['Dealer', 'Admin']
+
+# 🔐 LOGIN
+from .models import UserProfile, Dealer
+def login_view(request):
+    if request.method == "POST":
+        user = authenticate(
+            username=request.POST['username'],
+            password=request.POST['password']
+        )
+
+        if user:
+            login(request, user)
+
+            # 🔥 Ensure UserProfile exists
+            profile, created = UserProfile.objects.get_or_create(
+                user=user,
+                defaults={'role': 'Staff'}  # default
+            )
+
+            # 🔥 AUTO SET: if username = Dealer → role = Dealer
+            if user.username.lower() == "dealer":
+                profile.role = "Dealer"
+                profile.save()
+
+                # 🔥 Ensure Dealer table entry exists
+                Dealer.objects.get_or_create(
+                    user=user,
+                    defaults={'phone': '0000000000'}
+                )
+
+            role = profile.role
+
+            # 🔀 Redirect based on role
+            if role == 'Admin':
+                return redirect('dashboard')
+
+            elif role == 'Dealer':
+                return redirect('dealer_dashboard')
+
+            else:
+                return redirect('dashboard')
+
+        else:
+            return HttpResponse("Invalid Username or Password")
+
+    return render(request, 'login.html')
+
+
+def logout_view(request):
+    logout(request)
+    return redirect('login')
+
+
+# 📊 DASHBOARD
+@login_required
+def dashboard(request):
+    return render(request, 'dashboard.html', {
+        'customer_count': Customer.objects.count(),
+        'product_count': Product.objects.count(),
+        'invoice_count': Invoice.objects.count(),
+        'low_stock': Product.objects.filter(stock__lte=F('low_stock_limit'))  # ✅ UPDATED
+    })
+
+
+# 👤 CUSTOMER
+def customer_list(request):
+    data = Customer.objects.all()
+    edit_id = request.GET.get('edit')
+
+    customer = Customer.objects.get(id=edit_id) if edit_id else None
+
+    if request.method == "POST":
+        name = request.POST.get('name')
+        phone = request.POST.get('phone')
+        address = request.POST.get('address')
+
+        if customer:  # EDIT
+            customer.name = name
+            customer.phone = phone
+            customer.address = address
+            customer.save()
+        else:  # ADD
+            Customer.objects.create(
+                name=name,
+                phone=phone,
+                address=address
+            )
+
+        return redirect('customer')
+
+    return render(request, 'customer.html', {
+        'data': data,
+        'customer_to_edit': customer
+    })
+
+    if form.is_valid():
+        form.save()
+        return redirect('customer')
+
+    return render(request, 'customer.html', {
+        'data': data,
+        'form': form
+    })
+
+
+def delete_customer(request, id):
+    Customer.objects.filter(id=id).delete()
+    return redirect('customer')
+
+
+# 📦 PRODUCT + 🔍 SEARCH
+def product_list(request):
+    query = request.GET.get('q')
+
+    if query:
+        data = Product.objects.filter(name__icontains=query)
+    else:
+        data = Product.objects.all()
+
+    for p in data:
+        # ✅ Branch-wise stock
+        p.filtered_stocks = BranchStock.objects.filter(product=p)
+
+        # ✅ Total stock (display only)
+        p.total_stock = BranchStock.objects.filter(product=p).aggregate(
+            total=Sum('stock')
+        )['total'] or 0
+
+    edit_id = request.GET.get('edit')
+    product = Product.objects.filter(id=edit_id).first()
+
+    form = ProductForm(request.POST or None, instance=product)
+
+    if form.is_valid():
+        form.save()
+        return redirect('product')
+
+    return render(request, 'product.html', {
+        'data': data,
+        'form': form,
+        'product_to_edit': product
+    })
+
+def delete_product(request, id):
+    Product.objects.filter(id=id).delete()
+    return redirect('product')
+
+
+# 🧾 INVOICE (GST UPDATED)
+def create_invoice(request):
+    customers = Customer.objects.all()
+    branches = Branch.objects.all()
+    products = Product.objects.all()
+
+    # ✅ ADD REAL STOCK TO PRODUCTS
+    for p in products:
+        p.total_stock = BranchStock.objects.filter(product=p).aggregate(
+            total=Sum('stock')
+        )['total'] or 0
+
+    if request.method == "POST":
+        customer = Customer.objects.get(id=request.POST.get('customer'))
+        branch = Branch.objects.get(id=request.POST.get('branch'))
+
+        product_ids = request.POST.getlist('product[]')
+        qtys = request.POST.getlist('qty[]')
+
+        subtotal = 0
+        items_data = []
+
+        # 🔥 VALIDATION
+        for p_id, q in zip(product_ids, qtys):
+            if not q:
+                continue
+
+            product = Product.objects.get(id=p_id)
+            qty = int(q)
+
+            branch_stock, created = BranchStock.objects.get_or_create(
+                product=product,
+                branch=branch,
+                defaults={'stock': 0}
+            )
+
+            if branch_stock.stock < qty:
+                return render(request, 'invoice.html', {
+                    'error': f"Not enough stock in {branch.name} for {product.name}",
+                    'customers': customers,
+                    'products': products,
+                    'branches': branches
+                })
+
+            item_total = product.price * qty
+            subtotal += item_total
+
+            items_data.append((product, qty, item_total))
+
+        # ✅ GST
+        cgst = sgst = igst = 0
+
+        if customer.state == "Gujarat":
+            cgst = subtotal * 0.09
+            sgst = subtotal * 0.09
+        else:
+            igst = subtotal * 0.18
+
+        total = subtotal + cgst + sgst + igst
+
+        # ✅ CREATE INVOICE
+        words = amount_in_words(int(round(total)))        
+        invoice = Invoice.objects.create(
+            customer=customer,
+            branch=branch,
+            subtotal=subtotal,
+            cgst=cgst,
+            sgst=sgst,
+            igst=igst,
+            total=round(total),
+            amount_words=words   # ✅ ADD THIS
+        )
+
+        # ✅ SAVE ITEMS + REDUCE STOCK
+        for product, qty, item_total in items_data:
+
+            InvoiceItem.objects.create(
+                invoice=invoice,
+                product=product,
+                quantity=qty,
+                subtotal=item_total
+            )
+
+            branch_stock = BranchStock.objects.get(
+                product=product,
+                branch=branch
+            )
+
+            branch_stock.stock = F('stock') - qty
+            branch_stock.save()
+
+        return redirect('invoice_view', invoice.id)
+
+    return render(request, 'invoice.html', {
+        'customers': customers,
+        'products': products,
+        'branches': branches
+    })
+
+# 👁️ VIEW INVOICE
+from collections import defaultdict
+
+def view_invoice(request, id):
+    invoice = Invoice.objects.get(id=id)
+
+    # 🔥 IMPORTANT
+    items = InvoiceItem.objects.filter(invoice=invoice).select_related('product')
+
+    print("ITEM COUNT:", items.count())
+
+    hsn_summary = defaultdict(lambda: {'taxable':0, 'cgst':0, 'sgst':0})
+
+    for item in items:
+        hsn = item.product.hsn or "N/A"
+        taxable = item.subtotal
+
+        gst = item.product.gst or 18
+        cgst = taxable * (gst/2) / 100
+        sgst = taxable * (gst/2) / 100
+
+        hsn_summary[hsn]['taxable'] += taxable
+        hsn_summary[hsn]['cgst'] += cgst
+        hsn_summary[hsn]['sgst'] += sgst
+
+    hsn_data = [
+        {
+            'hsn': hsn,
+            'taxable': round(val['taxable'], 2),
+            'cgst': round(val['cgst'], 2),
+            'sgst': round(val['sgst'], 2),
+            'total_tax': round(val['cgst'] + val['sgst'], 2)
+        }
+        for hsn, val in hsn_summary.items()
+    ]
+
+    print("HSN DATA:", hsn_data)
+
+    return render(request, 'invoice_view.html', {
+        'invoice': invoice,
+        'items': items,
+        'hsn_data': hsn_data
+    })
+
+# 📄 INVOICE LIST
+def invoice_list(request):
+    invoices = Invoice.objects.all().order_by('-date')
+
+    invoice_data = []
+
+    for inv in invoices:
+        paid = Payment.objects.filter(invoice=inv).aggregate(Sum('amount'))['amount__sum'] or 0
+        due = inv.total - paid
+
+        invoice_data.append({
+            'invoice': inv,
+            'paid': paid,
+            'due': due
+        })
+
+    return render(request, 'invoice_list.html', {
+        'invoice_data': invoice_data
+    })
+
+def delete_invoice(request, id):
+    invoice = get_object_or_404(Invoice, id=id)
+
+    if request.method == "POST":
+        invoice.delete()
+
+    return redirect('invoice_list')
+
+# 💳 PAYMENT
+from decimal import Decimal
+
+def payment(request):
+    if request.method == "POST":
+        amount = Decimal(request.POST.get('amount'))
+
+        Payment.objects.create(
+            customer_id=request.POST.get('customer'),
+            invoice_id=request.POST.get('invoice') or None,
+            amount=amount,
+            method=request.POST.get('method'),
+            note=request.POST.get('note')
+        )
+
+        return redirect('payment')
+
+    # 🔥 MERGE LOGIC
+    data = Payment.objects.values(
+        'invoice_id',
+        'invoice__id',
+        'customer__name'
+    ).annotate(
+        total_amount=Sum('amount')
+    ).order_by('-invoice_id')
+
+    return render(request, 'payment.html', {
+        'data': data,
+        'customers': Customer.objects.all(),
+        'invoices': Invoice.objects.all()
+    })
+
+
+# 🛒 PURCHASE
+
+def purchase_list(request):
+    data = Purchase.objects.all()
+    form = PurchaseForm(request.POST or None)
+    branches = Branch.objects.all()
+
+    if request.method == "POST" and form.is_valid():
+        purchase = form.save(commit=False)
+
+        purchase.total = purchase.quantity * purchase.price
+
+        product = purchase.product
+        branch = purchase.branch
+        qty = purchase.quantity
+
+        # ✅ ADD STOCK TO BRANCH
+        stock, created = BranchStock.objects.get_or_create(
+            product=product,
+            branch=branch,
+            defaults={'stock': 0}
+        )
+
+        stock.stock += qty
+        stock.save()
+
+        purchase.save()
+
+        return redirect('purchase')
+
+    return render(request, 'purchase.html', {
+        'data': data,
+        'form': form,
+        'branches': branches
+    })
+
+
+# ⚠️ LOW STOCK (UPDATED)
+def low_stock(request):
+    items = Product.objects.filter(stock__lte=F('low_stock_limit'))  # ✅ UPDATED
+    return render(request, 'low_stock.html', {'items': items})
+
+
+# 📈 PROFIT
+@user_passes_test(is_admin)
+def profit_report(request):
+    sales = Invoice.objects.aggregate(Sum('total'))['total__sum'] or 0
+    purchase = Purchase.objects.aggregate(Sum('total'))['total__sum'] or 0
+
+    sales = float(sales)
+    purchase = float(purchase)
+
+    return render(request, 'profit.html', {
+        'sales': sales,
+        'purchase': purchase,
+        'profit': sales - purchase
+    })
+
+
+# 📊 SALES CHART
+def sales_chart(request):
+    data = Invoice.objects.annotate(
+        date_only=TruncDate('date')
+    ).values('date_only').annotate(total=Sum('total'))
+
+    return render(request, 'sales_chart.html', {
+        'labels': [str(d['date_only']) for d in data],
+        'totals': [float(d['total']) for d in data]
+    })
+
+
+# 📊 OUTSTANDING REPORT (NEW)
+@user_passes_test(is_admin)
+def outstanding_report(request):
+    customers = Customer.objects.all()
+    data = []
+
+    for c in customers:
+        total = Invoice.objects.filter(customer=c).aggregate(Sum('total'))['total__sum'] or 0
+        paid = Payment.objects.filter(customer=c).aggregate(Sum('amount'))['amount__sum'] or 0
+
+        total = float(total)
+        paid = float(paid)
+
+        data.append({
+            'customer': c,
+            'total': total,
+            'paid': paid,
+            'outstanding': total - paid
+        })
+
+    return render(request, 'outstanding.html', {'data': data})
+
+
+# 📊 ITEM SALES REPORT (NEW)
+@user_passes_test(is_admin)
+def item_sales_report(request):
+    data = InvoiceItem.objects.values('product__name').annotate(
+        total_qty=Sum('quantity')
+    )
+    return render(request, 'item_sales.html', {'data': data})
+
+
+# 🧾 PDF
+from django.template.loader import get_template
+from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
+from xhtml2pdf import pisa
+from collections import defaultdict
+
+def generate_invoice_pdf(request, id):
+    invoice = get_object_or_404(Invoice, id=id)
+    items = InvoiceItem.objects.filter(invoice=invoice).select_related('product')
+
+    # 🔥 HSN SUMMARY CALCULATION
+    hsn_summary = defaultdict(lambda: {'taxable': 0, 'cgst': 0, 'sgst': 0})
+
+    for item in items:
+        hsn = item.product.hsn or "N/A"
+        taxable = item.subtotal
+
+        gst = item.product.gst or 18
+        cgst = taxable * (gst / 2) / 100
+        sgst = taxable * (gst / 2) / 100
+
+        hsn_summary[hsn]['taxable'] += taxable
+        hsn_summary[hsn]['cgst'] += cgst
+        hsn_summary[hsn]['sgst'] += sgst
+
+    hsn_data = [
+        {
+            'hsn': h,
+            'taxable': round(v['taxable'], 2),
+            'cgst': round(v['cgst'], 2),
+            'sgst': round(v['sgst'], 2),
+            'total_tax': round(v['cgst'] + v['sgst'], 2)
+        }
+        for h, v in hsn_summary.items()
+    ]
+
+    template = get_template('invoice_view.html')
+
+    html = template.render({
+        'invoice': invoice,
+        'items': items,
+        'hsn_data': hsn_data,
+        'pdf': True   # 🔥 hide buttons
+    })
+
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="invoice_{invoice.id}.pdf"'
+
+    pisa.CreatePDF(html, dest=response)
+
+    return response
+
+def sales_return(request):
+    invoices = Invoice.objects.all()
+    products = Product.objects.all()
+
+    if request.method == "POST":
+        invoice = Invoice.objects.get(id=request.POST['invoice'])
+        product = Product.objects.get(id=request.POST['product'])
+        qty = int(request.POST['qty'])
+
+        SalesReturn.objects.create(
+            invoice=invoice,
+            product=product,
+            qty=qty
+        )
+
+        # ✅ stock increase
+        product.stock += qty
+        product.save()
+
+        return redirect('sales_return')
+
+    return render(request, 'sales_return.html', {
+        'invoices': invoices,
+        'products': products,
+        'data': SalesReturn.objects.all()
+    })
+
+def purchase_return(request):
+    purchases = Purchase.objects.all()
+    products = Product.objects.all()
+
+    if request.method == "POST":
+        purchase = Purchase.objects.get(id=request.POST['purchase'])
+        product = Product.objects.get(id=request.POST['product'])
+        qty = int(request.POST['qty'])
+
+        PurchaseReturn.objects.create(
+            purchase=purchase,
+            product=product,
+            qty=qty
+        )
+
+        # ❌ stock decrease
+        BranchStock.stock -= qty
+        product.save()
+
+        return redirect('purchase_return')
+
+    return render(request, 'purchase_return.html', {
+        'purchases': purchases,
+        'products': products,
+        'data': PurchaseReturn.objects.all()
+    })
+
+def supplier_report(request):
+    suppliers = Supplier.objects.all()
+    data = []
+
+    for s in suppliers:
+        total = Purchase.objects.filter(supplier=s).aggregate(Sum('total'))['total__sum'] or 0
+
+        data.append({
+            'supplier': s,
+            'total': total
+        })
+
+    return render(request, 'supplier_report.html', {'data': data})
+
+@user_passes_test(is_admin)
+def cashbook(request):
+    payments = Payment.objects.all().order_by('-date')
+
+    total_in = Payment.objects.aggregate(Sum('amount'))['amount__sum'] or 0
+
+    return render(request, 'cashbook.html', {
+        'payments': payments,
+        'total': total_in
+    })
+
+def vehicle_mapping(request):
+    vehicles = VehicleModel.objects.all()
+    products = Product.objects.all()
+
+    if request.method == "POST":
+        ProductVehicle.objects.create(
+            product_id=request.POST['product'],
+            vehicle_id=request.POST['vehicle']
+        )
+        return redirect('vehicle_mapping')
+
+    return render(request, 'vehicle_mapping.html', {
+        'vehicles': vehicles,
+        'products': products,
+        'data': ProductVehicle.objects.all()
+    })
+
+
+def vehicle_mapping_edit(request, id):
+    obj = ProductVehicle.objects.get(id=id)   # ✅ FIXED
+
+    if request.method == "POST":
+        obj.product_id = request.POST['product']
+        obj.vehicle_id = request.POST['vehicle']
+        obj.save()
+        return redirect('vehicle_mapping')
+
+    return render(request, 'vehicle_mapping_edit.html', {
+        'obj': obj,
+        'products': Product.objects.all(),
+        'vehicles': VehicleModel.objects.all()
+    })
+
+
+def vehicle_mapping_delete(request, id):
+    obj = ProductVehicle.objects.get(id=id)   # ✅ FIXED
+    obj.delete()
+    return redirect('vehicle_mapping')
+
+def barcode_billing(request):
+    product = None
+
+    if request.method == "POST":
+        code = request.POST['barcode']
+        product = Product.objects.filter(barcode=code).first()
+
+    return render(request, 'barcode.html', {'product': product})
+
+def fast_moving(request):
+    data = InvoiceItem.objects.values('product__name').annotate(
+        total=Sum('quantity')
+    ).order_by('-total')[:10]
+
+    return render(request, 'fast_moving.html', {'data': data})
+
+def dead_stock(request):
+    data = Product.objects.filter(stock__gt=0).exclude(
+        invoiceitem__isnull=False
+    )
+
+    return render(request, 'dead_stock.html', {'data': data})
+
+def owner_dashboard(request):
+    return render(request, 'owner_dashboard.html', {
+        'sales': Invoice.objects.aggregate(Sum('total'))['total__sum'] or 0,
+        'stock': Product.objects.aggregate(Sum('stock'))['stock__sum'] or 0,
+        'customers': Customer.objects.count()
+    })
+
+def branch_view(request):
+    if request.method == "POST":
+        Branch.objects.create(name=request.POST['name'])
+        return redirect('branch')
+
+    return render(request, 'branch.html', {
+        'data': Branch.objects.all()
+    })
+
+def branch_edit(request, id):
+    branch = Branch.objects.get(id=id)
+
+    if request.method == "POST":
+        branch.name = request.POST['name']
+        branch.save()
+        return redirect('branch')
+
+    return render(request, 'branch_edit.html', {'branch': branch})
+
+def branch_delete(request, id):
+    branch = Branch.objects.get(id=id)
+    branch.delete()
+    return redirect('branch')
+
+def stock_transfer(request):
+    products = Product.objects.all()
+    branches = Branch.objects.all()
+    branch_stock = BranchStock.objects.all()
+
+    if request.method == "POST":
+        product = Product.objects.get(id=request.POST['product'])
+        from_branch = Branch.objects.get(id=request.POST['from_branch'])
+        to_branch = Branch.objects.get(id=request.POST['to_branch'])
+        qty = int(request.POST['qty'])
+
+        # FROM stock
+        from_stock = BranchStock.objects.filter(
+            product=product,
+            branch=from_branch
+        ).first()
+
+        if not from_stock:
+            return HttpResponse("No stock available in FROM branch")
+
+        if from_stock.stock < qty:
+            return HttpResponse("Not enough stock in FROM branch")
+
+        # ✅ reduce from branch
+        from_stock.stock -= qty
+        from_stock.save()
+
+        # ✅ add to branch
+        to_stock, created = BranchStock.objects.get_or_create(
+            product=product,
+            branch=to_branch,
+            defaults={'stock': 0}
+        )
+
+        to_stock.stock += qty
+        to_stock.save()
+
+        # ✅ SAVE HISTORY
+        StockTransfer.objects.create(
+            product=product,
+            from_branch=from_branch,
+            to_branch=to_branch,
+            quantity=qty
+        )
+
+        # 🔥🔥 IMPORTANT FIX: UPDATE TOTAL PRODUCT STOCK
+        total_stock = BranchStock.objects.filter(product=product).aggregate(
+            total=Sum('stock')
+        )['total'] or 0
+
+        product.stock = total_stock
+        product.save()
+
+        return redirect('stock_transfer')
+
+    return render(request, 'stock_transfer.html', {
+        'products': products,
+        'branches': branches,
+        'branch_stock': branch_stock
+    })
+   
+from django.contrib.auth.decorators import login_required
+from .models import Dealer, DealerOrder, DealerOrderItem, Product
+
+
+# 🧑‍💼 DEALER DASHBOARD
+from django.http import HttpResponse
+
+@user_passes_test(is_dealer_or_admin)
+def dealer_dashboard(request):
+
+    if request.user.userprofile.role == 'Dealer':
+        dealer = Dealer.objects.filter(user=request.user).first()
+        products = Product.objects.filter(stock__gt=0)
+
+    else:  # Admin
+        products = Product.objects.all()
+
+    return render(request, 'dealer_dashboard.html', {'products': products})
+# 🛒 PLACE ORDER
+@login_required
+def dealer_place_order(request):
+
+    dealer = Dealer.objects.filter(user=request.user).first()
+
+    if not dealer:
+        return HttpResponse("Access Denied: Only Dealer can place order")
+
+    if request.method == "POST":
+
+        order = DealerOrder.objects.create(dealer=dealer)
+        has_item = False   # 🔥 check if any product selected
+
+        for key, value in request.POST.items():
+
+            # ✅ skip empty values
+            if not value or value == "":
+                continue
+
+            if key.startswith('qty_'):
+                try:
+                    qty = int(value)
+                except:
+                    continue
+
+                if qty <= 0:
+                    continue
+
+                product_id = key.split('_')[1]
+                product = Product.objects.get(id=product_id)
+
+                # ✅ stock check
+                if qty > product.stock:
+                    return HttpResponse(f"Not enough stock for {product.name}")
+
+                DealerOrderItem.objects.create(
+                    order=order,
+                    product=product,
+                    qty=qty
+                )
+
+                has_item = True
+
+        # ❌ if no product selected → delete empty order
+        if not has_item:
+            order.delete()
+            return HttpResponse("Please select at least one product")
+
+        return redirect('dealer_orders')
+
+    return redirect('dealer_dashboard')
+
+# 📄 ORDER HISTORY
+@login_required
+def dealer_orders(request):
+    dealer = Dealer.objects.get(user=request.user)
+    orders = DealerOrder.objects.filter(dealer=dealer)
+
+    return render(request, 'dealer_orders.html', {'orders': orders})
+
+@login_required
+def delete_dealer_order(request, id):
+    order = get_object_or_404(DealerOrder, id=id)
+
+    # 🔒 security: only owner delete kari shake
+    if order.dealer.user != request.user:
+        return HttpResponse("Unauthorized", status=403)
+
+    order.delete()
+    return redirect('dealer_orders')
+
+def send_whatsapp_invoice(request, id):
+    invoice = get_object_or_404(Invoice, id=id)
+    items = InvoiceItem.objects.filter(invoice=invoice)
+
+    customer = invoice.customer
+
+    # 📱 Phone format (India)
+    phone = customer.phone
+    if not phone.startswith('91'):
+        phone = '91' + phone
+
+    # 🧾 Message build
+    message = f"🧾 *Invoice #{invoice.id}*\n\n"
+    message += f"Customer: {customer.name}\n"
+    message += f"Date: {invoice.date.strftime('%d-%m-%Y')}\n\n"
+
+    message += "*Items:*\n"
+
+    for item in items:
+        message += f"- {item.product.name} x {item.quantity} = ₹{item.subtotal}\n"
+
+    message += "\n"
+    message += f"CGST: ₹{invoice.cgst}\n"
+    message += f"SGST: ₹{invoice.sgst}\n"
+    message += f"IGST: ₹{invoice.igst}\n"
+    message += f"\n💰 *Total: ₹{invoice.total}*"
+
+    # 🔗 Encode URL
+    encoded_message = urllib.parse.quote(message)
+
+    whatsapp_url = f"https://wa.me/{phone}?text={encoded_message}"
+
+    return redirect(whatsapp_url)
+
+# 🧾 E-INVOICE
+def generate_einvoice(request, id):
+    invoice = get_object_or_404(Invoice, id=id)
+    items = InvoiceItem.objects.filter(invoice=invoice)
+
+    data = generate_einvoice_json(invoice, items)
+    irn = generate_irn(invoice.id)
+
+    return render(request, 'einvoice.html', {
+        'data': data,
+        'irn': irn,
+        'invoice': invoice   # ✅ MUST
+    })
+
+
+# 🚚 E-WAY BILL
+
+def generate_ewaybill(request, id):
+    invoice = get_object_or_404(Invoice, id=id)
+    
+    print("Branch:", invoice.branch)
+
+    data = {
+        'invoice_no': invoice.id,
+        'from_location': invoice.branch.name if invoice.branch else "Main Warehouse",
+        'to': invoice.customer.name,
+        'vehicle_no': "GJ00XX0000",
+        'distance': "N/A",
+        'total': invoice.total
+    }
+
+    return render(request, 'ewaybill.html', {
+        'data': data,
+        'invoice': invoice   # ✅ ADD THIS
+    })
+
+# 👨‍💼 ADD SALESMAN
+def salesman_list(request):
+    data = Salesman.objects.all()
+    users = User.objects.exclude(salesman__isnull=False)  # already assigned users remove
+
+    if request.method == "POST":
+        user_id = request.POST.get('user')
+        phone = request.POST.get('phone')
+
+        if user_id and phone:
+            user = User.objects.get(id=user_id)
+
+            if not Salesman.objects.filter(user=user).exists():
+                Salesman.objects.create(user=user, phone=phone)
+
+        return redirect('salesman')
+
+    return render(request, 'salesman.html', {
+        'data': data,
+        'users': users
+    })
+
+
+# 👥 ASSIGN CUSTOMER
+def assign_customer(request):
+    if request.method == "POST":
+        customer_id = request.POST.get('customer')
+        salesman_id = request.POST.get('salesman')
+
+        if customer_id and salesman_id:
+            CustomerAssign.objects.get_or_create(
+                customer_id=customer_id,
+                salesman_id=salesman_id
+            )
+
+        return redirect('assign_customer')
+
+    return render(request, 'assign_customer.html', {
+        'customers': Customer.objects.all(),
+        'salesmen': Salesman.objects.all(),
+        'data': CustomerAssign.objects.select_related('customer', 'salesman')
+    })
+
+
+# 📍 ADD VISIT
+def add_visit(request):
+    if request.method == "POST":
+        salesman_id = request.POST.get('salesman')
+        customer_id = request.POST.get('customer')
+        notes = request.POST.get('notes')
+
+        if salesman_id and customer_id:
+            Visit.objects.create(
+                salesman_id=salesman_id,
+                customer_id=customer_id,
+                notes=notes
+            )
+
+        return redirect('visit')
+
+    return render(request, 'visit.html', {
+        'salesmen': Salesman.objects.all(),
+        'customers': Customer.objects.all(),
+        'data': Visit.objects.select_related('salesman', 'customer').order_by('-date')
+    })
+
+
+# 📊 REPORT
+def salesman_report(request):
+    data = Visit.objects.values(
+        'salesman__user__username'
+    ).annotate(total=models.Count('id'))
+
+    return render(request, 'salesman_report.html', {'data': data})
+
+from django.shortcuts import render
+from .models import InvoiceItem, Product
+import pandas as pd
+from sklearn.ensemble import RandomForestRegressor
+
+
+def get_predictions():
+    items = InvoiceItem.objects.select_related('invoice', 'product')
+
+    data = []
+
+    for item in items:
+        if item.invoice and item.invoice.date:
+            data.append({
+                'month': item.invoice.date.month,
+                'year': item.invoice.date.year,
+                'sales': item.quantity,
+                'product': item.product.id
+            })
+
+    df = pd.DataFrame(data)
+
+    if df.empty:
+        return [], []
+
+    predictions = []
+    alerts = []
+
+    for product_id in df['product'].unique():
+        product_df = df[df['product'] == product_id]
+
+        grouped = (
+            product_df
+            .groupby(['year', 'month'])['sales']
+            .sum()
+            .reset_index()
+            .sort_values(['year', 'month'])
+        )
+
+        product = Product.objects.get(id=product_id)
+
+        # ✅ HANDLE SMALL DATA (VERY IMPORTANT FIX)
+        if len(grouped) == 1:
+            prediction = int(grouped['sales'].iloc[0])
+        else:
+            grouped['time'] = range(1, len(grouped) + 1)
+
+            X = grouped[['time']]
+            y = grouped['sales']
+
+            model = RandomForestRegressor(
+                n_estimators=100,
+                random_state=42
+            )
+            model.fit(X, y)
+
+            next_time = [[grouped['time'].max() + 1]]
+            prediction = int(model.predict(next_time)[0])
+
+        required = max(prediction - product.stock, 0)
+
+        predictions.append({
+            'name': product.name,
+            'stock': product.stock,
+            'prediction': prediction,
+            'required': required
+        })
+
+        if product.stock < prediction:
+            alerts.append({
+                'name': product.name,
+                'required': required
+            })
+
+    return predictions, alerts
+
+
+def demand_prediction(request):
+    predictions, alerts = get_predictions()
+
+    labels = []
+    actual_data = []
+    predicted_data = []
+
+    # 📊 Prepare graph data
+    for p in predictions:
+        labels.append(p['name'])
+        actual_data.append(p['stock'])
+        predicted_data.append(p['prediction'])
+
+    return render(request, 'prediction.html', {
+        'predictions': predictions,
+        'alerts': alerts,
+        'labels': labels,
+        'actual_data': actual_data,
+        'predicted_data': predicted_data
+    })
+
+
+def ai_dashboard(request):
+    predictions, alerts = get_predictions()
+
+    return render(request, 'ai_dashboard.html', {
+        'predictions': predictions,
+        'alerts': alerts,
+        'alert_count': len(alerts)
+    })

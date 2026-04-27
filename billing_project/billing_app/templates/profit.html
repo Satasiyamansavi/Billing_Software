@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<h3 class="mb-4">📊 Profit Report</h3>
+
+<div class="row">
+
+    <div class="col-md-4 mb-3">
+        <div class="card shadow border-0 text-white" style="background:#007bff;">
+            <div class="card-body text-center">
+                <h5>Total Sales</h5>
+                <h2>₹{{ sales }}</h2>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-3">
+        <div class="card shadow border-0 text-white" style="background:#ffc107;">
+            <div class="card-body text-center">
+                <h5>Total Purchase</h5>
+                <h2>₹{{ purchase }}</h2>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-3">
+        <div class="card shadow border-0 text-white 
+            {% if profit >= 0 %}bg-success{% else %}bg-danger{% endif %}">
+            <div class="card-body text-center">
+                <h5>Profit</h5>
+                <h2>₹{{ profit }}</h2>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<div class="card shadow p-3 mt-4">
+    <h5>📌 Summary</h5>
+
+    {% if profit > 0 %}
+        <p class="text-success">✅ You are in Profit</p>
+    {% elif profit < 0 %}
+        <p class="text-danger">⚠️ You are in Loss</p>
+    {% else %}
+        <p class="text-secondary">No Profit No Loss</p>
+    {% endif %}
+</div>
+
+{% endblock %}

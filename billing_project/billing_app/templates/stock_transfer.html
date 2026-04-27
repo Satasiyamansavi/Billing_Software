@@ -1,0 +1,118 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<h3 class="mb-4">🔄 Stock Transfer</h3>
+
+<div class="card shadow border-0 mb-4">
+    <div class="card-body">
+
+        <h5 class="mb-3">Transfer Stock</h5>
+
+        <form method="post" class="row g-2">
+            {% csrf_token %}
+
+            <div class="col-md-3">
+                <label>Product</label>
+                <select name="product" class="form-control" required>
+                    <option value="">Select Product</option>
+                    {% for p in products %}
+                        <option value="{{ p.id }}">{{ p.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-md-3">
+                <label>From Branch</label>
+                <select name="from_branch" class="form-control" required>
+                    <option value="">Select Branch</option>
+                    {% for b in branches %}
+                        <option value="{{ b.id }}">{{ b.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-md-3">
+                <label>To Branch</label>
+                <select name="to_branch" class="form-control" required>
+                    <option value="">Select Branch</option>
+                    {% for b in branches %}
+                        <option value="{{ b.id }}">{{ b.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-md-2">
+                <label>Qty</label>
+                <input type="number" name="qty" 
+                       class="form-control" 
+                       min="1" required>
+            </div>
+
+            <div class="col-md-1 d-flex align-items-end">
+                <button class="btn btn-primary w-100">
+                    <i class="fas fa-exchange-alt"></i>
+                </button>
+            </div>
+
+        </form>
+
+    </div>
+</div>
+
+{% if error %}
+<div class="alert alert-danger">
+    {{ error }}
+</div>
+{% endif %}
+
+<div class="card shadow border-0">
+    <div class="card-body p-0">
+
+        <table class="table table-hover mb-0">
+            <thead class="table-dark">
+                <tr>
+                    <th>Product</th>
+                    <th>Branch</th>
+                    <th>Stock</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+
+            <tbody>
+            {% for s in branch_stock %}
+            <tr>
+
+                <td>{{ s.product.name }}</td>
+                <td>{{ s.branch.name }}</td>
+
+                <td>
+                    <span class="badge 
+                        {% if s.stock < 5 %}bg-danger{% else %}bg-success{% endif %}">
+                        {{ s.stock }}
+                    </span>
+                </td>
+
+                <td>
+                    {% if s.stock < 5 %}
+                        <span class="badge bg-danger">Low</span>
+                    {% else %}
+                        <span class="badge bg-success">OK</span>
+                    {% endif %}
+                </td>
+
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="4" class="text-center p-3">
+                    No Stock Found
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+
+        </table>
+
+    </div>
+</div>
+
+{% endblock %}

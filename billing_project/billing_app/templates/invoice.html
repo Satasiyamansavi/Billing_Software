@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="container mt-4">
+
+    <div class="card shadow-lg border-0">
+
+        <div class="card-header bg-primary text-white">
+            <h4 class="mb-0">🧾 Create Invoice</h4>
+        </div>
+
+        <div class="card-body">
+
+            <form method="post">
+                {% csrf_token %}
+
+                <div class="row mb-3">
+
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Customer</label>
+                        <select name="customer" class="form-control" required>
+                            <option value="">Select Customer</option>
+                            {% for c in customers %}
+                                <option value="{{ c.id }}">{{ c.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Branch</label>
+                        <select name="branch" class="form-control" required>
+                            <option value="">Select Branch</option>
+                            {% for b in branches %}
+                                <option value="{{ b.id }}">{{ b.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                </div>
+
+                <hr>
+
+                <h5 class="fw-bold mb-3">📦 Products</h5>
+
+                <div id="items">
+
+                    <div class="row g-2 mb-2 item-row">
+
+                        <div class="col-md-8">
+                            <select name="product[]" class="form-control" required>
+                                <option value="">Select Product</option>
+                                {% for p in products %}
+                                    <option value="{{ p.id }}">
+                                        {{ p.name }} (Stock: {{ p.total_stock }})
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="col-md-3">
+                            <input type="number" name="qty[]" class="form-control" placeholder="Qty" required>
+                        </div>
+
+                        <div class="col-md-1 d-flex align-items-center">
+                            <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)">
+                                ✖
+                            </button>
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <button type="button" class="btn btn-success mt-2" onclick="addRow()">
+                    ➕ Add Item
+                </button>
+
+                <hr>
+
+                <button class="btn btn-primary w-100 mt-2">
+                    🚀 Generate Invoice
+                </button>
+
+            </form>
+
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+function addRow() {
+    let row = document.querySelector('.item-row').cloneNode(true);
+    row.querySelectorAll('input').forEach(i => i.value = "");
+    document.getElementById('items').appendChild(row);
+}
+
+function removeRow(btn) {
+    let row = btn.closest('.item-row');
+    if (document.querySelectorAll('.item-row').length > 1) {
+        row.remove();
+    }
+}
+</script>
+
+{% endblock %}

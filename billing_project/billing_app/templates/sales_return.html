@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<h3>Sales Return</h3>
+
+<form method="post" class="card p-3 mb-3">
+    {% csrf_token %}
+
+    <select name="invoice" class="form-control mb-2">
+        {% for i in invoices %}
+        <option value="{{ i.id }}">Invoice {{ i.id }}</option>
+        {% endfor %}
+    </select>
+
+    <select name="product" class="form-control mb-2">
+        {% for p in products %}
+        <option value="{{ p.id }}">{{ p.name }}</option>
+        {% endfor %}
+    </select>
+
+    <input type="number" name="qty" placeholder="Qty" class="form-control mb-2">
+
+    <button class="btn btn-danger">Return</button>
+</form>
+
+{% endblock %}

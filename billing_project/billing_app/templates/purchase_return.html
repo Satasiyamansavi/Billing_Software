@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<h3>Purchase Return</h3>
+
+<form method="post" class="card p-3 mb-3">
+    {% csrf_token %}
+
+    <select name="purchase" class="form-control mb-2">
+        {% for p in purchases %}
+        <option value="{{ p.id }}">Purchase {{ p.id }}</option>
+        {% endfor %}
+    </select>
+
+    <select name="product" class="form-control mb-2">
+        {% for p in products %}
+        <option value="{{ p.id }}">{{ p.name }}</option>
+        {% endfor %}
+    </select>
+
+    <input type="number" name="qty" class="form-control mb-2">
+
+    <button class="btn btn-warning">Return</button>
+</form>
+
+{% endblock %}

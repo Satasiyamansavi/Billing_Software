@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<h3 class="mb-4">🚚 Vehicle Mapping</h3>
+
+<div class="card shadow border-0 mb-4">
+    <div class="card-body">
+        <h5 class="mb-3">➕ Add Mapping</h5>
+
+        <form method="post" class="row">
+            {% csrf_token %}
+
+            <div class="col-md-5 mb-2">
+                <select name="product" class="form-control">
+                    <option value="">Select Product</option>
+                    {% for p in products %}
+                        <option value="{{ p.id }}">{{ p.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-md-5 mb-2">
+                <select name="vehicle" class="form-control">
+                    <option value="">Select Vehicle</option>
+                    {% for v in vehicles %}
+                        <option value="{{ v.id }}">{{ v.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-md-2">
+                <button class="btn btn-primary w-100">
+                    <i class="fas fa-plus"></i> Add
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<input type="text" id="search" class="form-control mb-3" placeholder="Search Product or Vehicle...">
+
+<div class="card shadow border-0">
+    <div class="card-body p-0">
+
+        <table class="table table-hover mb-0" id="table">
+            <thead class="table-dark">
+                <tr>
+                    <th>Product</th>
+                    <th>Vehicle</th>
+                    <th>Status</th>
+                    <th class="text-center">Action</th>
+                </tr>
+            </thead>
+
+            <tbody>
+            {% for d in data %}
+            <tr>
+
+                <td>{{ d.product }}</td>
+                <td>{{ d.vehicle }}</td>
+
+                <td>
+                    <span class="badge bg-success">Active</span>
+                </td>
+
+                <td class="text-center">
+
+                    <a href="{% url 'vehicle_mapping_edit' d.id %}" 
+                       class="btn btn-sm btn-outline-primary me-1" 
+                       title="Edit">
+                        <i class="fas fa-edit"></i>
+                    </a>
+
+                    <a href="{% url 'vehicle_mapping_delete' d.id %}" 
+                       class="btn btn-sm btn-outline-danger"
+                       title="Delete"
+                       onclick="return confirm('Are you sure?');">
+                        <i class="fas fa-trash"></i>
+                    </a>
+
+                </td>
+
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="4" class="text-center p-3">No Mapping Found</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+
+        </table>
+
+    </div>
+</div>
+
+<script>
+document.getElementById("search").addEventListener("keyup", function() {
+    let value = this.value.toLowerCase();
+    let rows = document.querySelectorAll("#table tbody tr");
+
+    rows.forEach(row => {
+        let text = row.innerText.toLowerCase();
+        row.style.display = text.includes(value) ? "" : "none";
+    });
+});
+</script>
+
+{% endblock %}

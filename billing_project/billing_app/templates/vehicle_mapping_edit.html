@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<h3>Edit Vehicle Mapping</h3>
+
+<form method="post" class="card p-3">
+    {% csrf_token %}
+
+    <select name="product" class="form-control mb-2">
+        {% for p in products %}
+        <option value="{{ p.id }}" {% if obj.product_id == p.id %}selected{% endif %}>
+            {{ p.name }}
+        </option>
+        {% endfor %}
+    </select>
+
+    <select name="vehicle" class="form-control mb-2">
+        {% for v in vehicles %}
+        <option value="{{ v.id }}" {% if obj.vehicle_id == v.id %}selected{% endif %}>
+            {{ v.name }}
+        </option>
+        {% endfor %}
+    </select>
+
+    <button class="btn btn-primary">Update</button>
+</form>
+
+<a href="{% url 'vehicle_mapping' %}" class="btn btn-secondary mt-2">Back</a>
+
+{% endblock %}

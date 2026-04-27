@@ -1,0 +1,120 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="container-fluid mt-3">
+
+    <!-- HEADER + SEARCH -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="fw-semibold mb-0">Invoice History</h4>
+
+        <input type="text" id="searchInput" 
+               class="form-control form-control-sm w-25"
+               placeholder="Search customer...">
+    </div>
+
+    <!-- SUMMARY (MINIMAL) -->
+    <div class="row mb-3">
+        <div class="col-md-30">
+            <div class="card shadow-sm border-0 p-2 text-center">
+                <small class="text-muted">Total</small>
+                <div class="fw-semibold">{{ invoice_data|length }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TABLE -->
+    <div class="card shadow-sm border-0 rounded-3">
+
+        <div class="table-responsive">
+            <table class="table align-middle mb-0" id="invoiceTable">
+
+                <thead class="bg-light border-bottom">
+                    <tr class="text-muted small">
+                        <th>ID</th>
+                        <th>Customer</th>
+                        <th>Products</th>
+                        <th class="text-end">Total</th>
+                        <th class="text-end">Paid</th>
+                        <th class="text-end">Balance</th>
+                        <th>Date</th>
+                        <th class="text-center">Action</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for d in invoice_data %}
+                    <tr>
+
+                        <td class="text-muted">{{ d.invoice.id }}</td>
+
+                        <td class="fw-medium customer-name">
+                            {{ d.invoice.customer.name }}
+                        </td>
+
+                        <td class="small text-muted">
+                            {% for item in d.invoice.invoiceitem_set.all|slice:":2" %}
+                                {{ item.product.name }} × {{ item.quantity }}<br>
+                            {% endfor %}
+                            {% if d.invoice.invoiceitem_set.count > 2 %}
+                                <span class="text-muted">+ more</span>
+                            {% endif %}
+                        </td>
+
+                        <td class="text-end fw-semibold">
+                            ₹{{ d.invoice.total }}
+                        </td>
+
+                        <td class="text-end">
+                            ₹{{ d.paid|floatformat:2 }}
+                        </td>
+
+                        <td class="text-end">
+                            {% if d.extra > 0 %}
+                                <span class="text-primary small">+₹{{ d.extra }}</span>
+                            {% elif d.due > 0 %}
+                                <span class="text-danger small">₹{{ d.due }}</span>
+                            {% else %}
+                                <span class="text-success small">Paid</span>
+                            {% endif %}
+                        </td>
+
+                        <td class="text-muted small">
+                            {{ d.invoice.date|date:"d M Y" }}
+                        </td>
+
+                        <td class="text-center">
+                            <form action="{% url 'delete_invoice' d.invoice.id %}" method="POST"
+                                  onsubmit="return confirm('Delete this invoice?');">
+                                {% csrf_token %}
+                                <button class="btn btn-sm btn-light border">
+                                    <i class="fas fa-trash text-danger"></i>
+                                </button>
+                            </form>
+                        </td>
+
+                    </tr>
+                    {% endfor %}
+                </tbody>
+
+            </table>
+        </div>
+
+    </div>
+
+</div>
+
+<!-- SEARCH SCRIPT -->
+<script>
+document.getElementById("searchInput").addEventListener("keyup", function () {
+    let value = this.value.toLowerCase();
+    let rows = document.querySelectorAll("#invoiceTable tbody tr");
+
+    rows.forEach(row => {
+        let name = row.querySelector(".customer-name").innerText.toLowerCase();
+        row.style.display = name.includes(value) ? "" : "none";
+    });
+});
+</script>
+
+{% endblock %} 

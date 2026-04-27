@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Invoice</title>
+
+    <style> 
+    body { font-family: Arial; font-size: 10px; /* 🔥 smaller for single page */ width: 780px; margin: auto; } 
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; } 
+    td, th { border: 1px solid black; padding: 3px; word-wrap: break-word; } 
+    .no-border td { border: none; } .right { text-align: right; } 
+    .center { text-align: center; } /* 🔥 PDF SETTINGS */ 
+    @page { size: A4 portrait; margin: 5mm; } /* 🔥 PREVENT PAGE BREAK */ 
+    table, tr, td, th { page-break-inside: avoid; } /* 🔥 BUTTON UI */ 
+    .btns { margin-top: 20px; text-align: center; } 
+    .btn { padding: 6px 10px; margin: 2px; text-decoration: none; color: white; background: black; display: inline-block; font-size: 12px; } /* 🔥 HIDE BUTTONS IN PRINT/PDF */ 
+    @media print { .btns { display: none; } } 
+    </style>
+</head>
+
+<body>
+
+<table>
+<tr>
+<td colspan="2" class="center">
+<b>TAX INVOICE</b>
+</td>
+</tr>
+
+<tr>
+<td width="50%">
+<b>RADHE FURNITURE</b><br>
+Ahmedabad, Gujarat<br>
+GSTIN: 24XXXXX1234X1Z5<br>
+Contact: 9999999999
+</td>
+
+<td class="right">
+Invoice No: RF/{{ invoice.id }}<br>
+Dated: {{ invoice.date }}
+</td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td width="50%">
+<b>Consignee (Ship to)</b><br>
+{{ invoice.customer.name }}<br>
+{{ invoice.customer.address }}<br>
+GSTIN: {{ invoice.customer.gstin }}<br>
+State: {{ invoice.customer.state }}
+</td>
+
+<td width="50%">
+<b>Buyer (Bill to)</b><br>
+{{ invoice.customer.name }}<br>
+{{ invoice.customer.address }}<br>
+GSTIN: {{ invoice.customer.gstin }}<br>
+State: {{ invoice.customer.state }}
+</td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td width="50%">Delivery Note</td>
+<td width="50%">Mode/Terms of Payment</td>
+</tr>
+
+<tr>
+<td width="50%">Dispatch Doc No.</td>
+<td width="50%">Delivery Note Date</td>
+</tr>
+
+<tr>
+<td width="50%">Dispatched through</td>
+<td width="50%">Destination</td>
+</tr>
+
+<tr>
+<td>Terms of Delivery</td>
+<td width="50%"></td>
+</tr>
+</table>
+
+<table>
+<tr>
+<th>Sl</th>
+<th>Description of Goods</th>
+<th>HSN/SAC</th>
+<th>GST%</th>
+<th>Qty</th>
+<th>Rate</th>
+<th>Amount</th>
+</tr>
+
+{% for item in items %}
+<tr>
+<td>{{ forloop.counter }}</td>
+<td>{{ item.product.name }}</td>
+<td>{{ item.product.hsn|default:"-" }}</td>
+<td>{{ item.product.gst|default:"18" }}%</td>
+<td>{{ item.quantity }} Pcs</td>
+<td>{{ item.product.price }}</td>
+<td>{{ item.subtotal }}</td>
+</tr>
+{% endfor %}
+
+<tr>
+<td colspan="6" class="right"><b>Total</b></td>
+<td><b>{{ invoice.subtotal }}</b></td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td class="right">CGST</td>
+<td>{{ invoice.cgst }}</td>
+</tr>
+
+<tr>
+<td class="right">SGST</td>
+<td>{{ invoice.sgst }}</td>
+</tr>
+
+<tr>
+<td class="right"><b>Total ₹</b></td>
+<td><b>{{ invoice.total }}</b></td>
+</tr>
+</table>
+
+<br>
+
+<b>Amount Chargeable (in words)</b><br>
+{{ invoice.amount_words|default:"NOT COMING" }} Only
+
+<br><br>
+
+<!-- HSN SUMMARY -->
+<table>
+<tr>
+<th>HSN/SAC</th>
+<th>Taxable Value</th>
+<th>CGST</th>
+<th>SGST</th>
+<th>Total Tax</th>
+</tr>
+
+{% for h in hsn_data %}
+<tr>
+<td>{{ h.hsn }}</td>
+<td>{{ h.taxable }}</td>
+<td>{{ h.cgst }}</td>
+<td>{{ h.sgst }}</td>
+<td>{{ h.total_tax }}</td>
+</tr>
+{% endfor %}
+</table>
+
+<br>
+
+<b>Declaration</b><br>
+We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.
+
+<br><br>
+
+<table class="no-border">
+<tr>
+<td>
+<b>Company's Bank Details</b><br>
+A/c Holder's Name: Radhe Furniture<br>
+Bank Name: HDFC Bank<br>
+A/c No: 1234567890<br>
+IFSC: HDFC0000001
+</td>
+
+<td class="right">
+for Radhe Furniture<br><br><br>
+Authorised Signatory
+</td>
+</tr>
+</table>
+
+<br>
+
+<center>SUBJECT TO AHMEDABAD JURISDICTION</center>
+<center>This is a Computer Generated Invoice</center>
+
+<!-- 🔥 BUTTONS -->
+{% if not pdf %}
+<div class="btns">
+    <button class="btn print" onclick="window.print()">Print</button>
+
+    <a href="{% url 'invoice_pdf' invoice.id %}" class="btn pdf">Download PDF</a>
+    <a href="{% url 'whatsapp_invoice' invoice.id %}" class="btn whatsapp">WhatsApp</a>
+    <a href="{% url 'einvoice' invoice.id %}" class="btn einvoice">E-Invoice</a>
+    <a href="{% url 'ewaybill' invoice.id %}" class="btn eway">E-Way Bill</a>
+    <a href="{% url 'invoice_list' %}" class="btn back">Back</a>
+</div>
+{% endif %}
+</body>
+</html>

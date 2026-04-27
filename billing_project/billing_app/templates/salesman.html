@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="container">
+
+    <h3 class="fw-bold mb-4">👨‍💼 Salesman Management</h3>
+
+    <div class="card shadow-sm p-4 mb-4">
+        <h5 class="mb-3">➕ Add Salesman</h5>
+
+        <form method="post">
+        {% csrf_token %}
+
+        <div class="row g-2">
+            <div class="col-md-5">
+                <select name="user" class="form-control" required>
+                    <option value="">Select User</option>
+                    {% for u in users %}
+                    <option value="{{ u.id }}">{{ u.username }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-md-5">
+                <input type="text" name="phone" placeholder="Phone" class="form-control" required>
+            </div>
+
+            <div class="col-md-2">
+                <button class="btn btn-primary w-100">
+                    <i class="fas fa-plus"></i> Add
+                </button>
+            </div>
+        </div>
+
+        </form>
+    </div>
+
+    <div class="row">
+        {% for s in data %}
+        <div class="col-md-4 mb-3">
+            <div class="card shadow-sm border-0 text-center p-3">
+
+                <i class="fas fa-user-tie fa-2x text-primary mb-2"></i>
+
+                <h5>{{ s.user.username }}</h5>
+                <p class="text-muted">{{ s.phone }}</p>
+
+            </div>
+        </div>
+        {% empty %}
+        <p class="text-muted">No Salesman Found</p>
+        {% endfor %}
+    </div>
+
+</div>
+
+{% endblock %}

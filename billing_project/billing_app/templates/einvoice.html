@@ -1,0 +1,57 @@
+ {% extends 'base.html' %}
+{% block content %}
+
+<div class="container mt-4">
+
+    <h2 class="mb-3">🧾 E-Invoice</h2>
+
+    <div class="card shadow p-4">
+
+        <p><b>Invoice No:</b> {{ data.DocDtls.No }}</p>
+        <p><b>Date:</b> {{ data.DocDtls.Dt }}</p>
+        <p><b>Customer:</b> {{ data.BuyerDtls.LglNm }}</p>
+        <p><b>State:</b> {{ data.BuyerDtls.State }}</p>
+
+        <hr>
+
+        <h5>Items</h5>
+
+        <table class="table table-bordered">
+            <thead class="table-dark">
+                <tr>
+                    <th>Product</th>
+                    <th>Qty</th>
+                    <th>Price</th>
+                    <th>Total</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for item in data.ItemList %}
+                <tr>
+                    <td>{{ item.PrdDesc }}</td>
+                    <td>{{ item.Qty }}</td>
+                    <td>₹{{ item.UnitPrice }}</td>
+                    <td>₹{{ item.TotAmt }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <h4 class="text-end">Total: ₹{{ data.ValDtls.TotInvVal }}</h4>
+
+        <hr>
+
+        <p><b>IRN:</b> 
+            <span class="badge bg-success">{{ irn }}</span>
+        </p>
+
+       <a href="{% url 'invoice_view' invoice.id %}" class="btn btn-secondary">
+           ← Back
+       </a>
+
+    </div>
+
+</div>
+
+{% endblock %}  

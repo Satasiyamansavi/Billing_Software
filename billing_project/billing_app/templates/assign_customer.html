@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="container">
+
+    <h3 class="fw-bold mb-4">🔗 Customer Assignment</h3>
+
+    <div class="card shadow border-0 mb-4">
+        <div class="card-body">
+
+            <h5 class="mb-3">➕ Assign Customer</h5>
+
+            <form method="post" class="row g-2">
+                {% csrf_token %}
+
+                <div class="col-md-5">
+                    <label>Customer</label>
+                    <select name="customer" class="form-control" required>
+                        <option value="">Select Customer</option>
+                        {% for c in customers %}
+                            <option value="{{ c.id }}">{{ c.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-md-5">
+                    <label>Salesman</label>
+                    <select name="salesman" class="form-control" required>
+                        <option value="">Select Salesman</option>
+                        {% for s in salesmen %}
+                            <option value="{{ s.id }}">{{ s.user.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-md-2 d-flex align-items-end">
+                    <button class="btn btn-success w-100">
+                        <i class="fas fa-link"></i> Assign
+                    </button>
+                </div>
+
+            </form>
+
+        </div>
+    </div>
+
+    <input type="text" id="search" class="form-control mb-3" 
+           placeholder="Search Customer / Salesman...">
+
+    <div class="card shadow border-0">
+        <div class="card-body p-0">
+
+            <table class="table table-hover mb-0" id="table">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Customer</th>
+                        <th>Salesman</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for a in data %}
+                    <tr>
+
+                        <td>{{ a.customer.name }}</td>
+                        <td>{{ a.salesman.user.username }}</td>
+
+                        <td>
+                            <span class="badge bg-success">Assigned</span>
+                        </td>
+
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="3" class="text-center text-muted p-3">
+                            No Assignments Found
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+
+            </table>
+
+        </div>
+    </div>
+
+</div>
+
+<script>
+document.getElementById("search").addEventListener("keyup", function() {
+    let value = this.value.toLowerCase();
+    let rows = document.querySelectorAll("#table tbody tr");
+
+    rows.forEach(row => {
+        let text = row.innerText.toLowerCase();
+        row.style.display = text.includes(value) ? "" : "none";
+    });
+});
+</script>
+
+{% endblock %}
