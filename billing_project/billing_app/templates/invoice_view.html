@@ -4,15 +4,18 @@
     <title>Invoice</title>
 
     <style> 
-    body { font-family: Arial; font-size: 10px; /* 🔥 smaller for single page */ width: 780px; margin: auto; } 
+    body { font-family: Arial; 
+        font-size: 10px; 
+        width: 780px; margin: auto; } 
     table { width: 100%; border-collapse: collapse; table-layout: fixed; } 
     td, th { border: 1px solid black; padding: 3px; word-wrap: break-word; } 
-    .no-border td { border: none; } .right { text-align: right; } 
-    .center { text-align: center; } /* 🔥 PDF SETTINGS */ 
-    @page { size: A4 portrait; margin: 5mm; } /* 🔥 PREVENT PAGE BREAK */ 
-    table, tr, td, th { page-break-inside: avoid; } /* 🔥 BUTTON UI */ 
+    .no-border td { border: none; } 
+    .right { text-align: right; } 
+    .center { text-align: center; } 
+    @page { size: A4 portrait; margin: 5mm; } 
+    table, tr, td, th { page-break-inside: avoid; } 
     .btns { margin-top: 20px; text-align: center; } 
-    .btn { padding: 6px 10px; margin: 2px; text-decoration: none; color: white; background: black; display: inline-block; font-size: 12px; } /* 🔥 HIDE BUTTONS IN PRINT/PDF */ 
+    .btn { padding: 6px 10px; margin: 2px; text-decoration: none; color: white; background: black; display: inline-block; font-size: 12px; } 
     @media print { .btns { display: none; } } 
     </style>
 </head>
@@ -136,7 +139,6 @@ State: {{ invoice.customer.state }}
 
 <br><br>
 
-<!-- HSN SUMMARY -->
 <table>
 <tr>
 <th>HSN/SAC</th>
@@ -186,7 +188,6 @@ Authorised Signatory
 <center>SUBJECT TO AHMEDABAD JURISDICTION</center>
 <center>This is a Computer Generated Invoice</center>
 
-<!-- 🔥 BUTTONS -->
 {% if not pdf %}
 <div class="btns">
     <button class="btn print" onclick="window.print()">Print</button>
