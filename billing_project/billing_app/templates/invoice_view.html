@@ -1,193 +1,213 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Invoice</title>
+<title>Invoice</title>
 
-    <style> 
-    body { font-family: Arial; 
-        font-size: 10px; 
-        width: 780px; margin: auto; } 
-    table { width: 100%; border-collapse: collapse; table-layout: fixed; } 
-    td, th { border: 1px solid black; padding: 3px; word-wrap: break-word; } 
-    .no-border td { border: none; } 
-    .right { text-align: right; } 
-    .center { text-align: center; } 
-    @page { size: A4 portrait; margin: 5mm; } 
-    table, tr, td, th { page-break-inside: avoid; } 
-    .btns { margin-top: 20px; text-align: center; } 
-    .btn { padding: 6px 10px; margin: 2px; text-decoration: none; color: white; background: black; display: inline-block; font-size: 12px; } 
-    @media print { .btns { display: none; } } 
-    </style>
+<style>
+
+/* 🔥 BODY BACKGROUND */
+body {
+    font-family: Arial;
+    font-size: 10px;
+    background: #eee;
+}
+
+/* 🔥 A4 PAGE CONTAINER */
+.page {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 20px auto;
+    padding: 10mm;
+    background: white;
+    box-shadow: 0 0 10px rgba(0,0,0,0.2);
+}
+
+/* TABLE */
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+td, th {
+    border: 1px solid black;
+    padding: 1px;
+    font-size: 9px;
+}
+
+.center { text-align: center; }
+.right { text-align: right; }
+
+/* PDF FIX */
+@page {
+    size: A4;
+    margin: 10mm;
+}
+
+/* FIXED ROW HEIGHT
+.row {
+    height: 22px;
+} */
+
+.btns { 
+    margin-top: 20px; text-align: center; 
+} 
+.btn { 
+    padding: 6px 10px; 
+    margin: 2px; 
+    text-decoration: none; 
+    color: white; 
+    background: black; 
+    display: inline-block; 
+    font-size: 12px; 
+}
+    
+/* 🔥 HIDE BUTTONS IN PRINT/PDF */ 
+@media print { 
+    .btns { display: none; } 
+}
+
+</style>
 </head>
 
 <body>
 
+<div class="page">
+
+<!-- HEADER -->
 <table>
 <tr>
-<td colspan="2" class="center">
-<b>TAX INVOICE</b>
+<td colspan="6" class="center">
+<b style="font-size:16px;">RADHE FURNITURE</b><br>
+1, AMAR ESTATE, SARKHEJ, AHMEDABAD<br>
+MO: 9824034212<br>
+GSTIN: 24XXXXX1234X1Z5
 </td>
 </tr>
 
 <tr>
-<td width="50%">
-<b>RADHE FURNITURE</b><br>
-Ahmedabad, Gujarat<br>
-GSTIN: 24XXXXX1234X1Z5<br>
-Contact: 9999999999
-</td>
-
-<td class="right">
-Invoice No: RF/{{ invoice.id }}<br>
-Dated: {{ invoice.date }}
-</td>
+<td colspan="6" class="center"><b>TAX INVOICE</b></td>
 </tr>
 </table>
 
+<!-- PARTY -->
 <table>
 <tr>
-<td width="50%">
-<b>Consignee (Ship to)</b><br>
-{{ invoice.customer.name }}<br>
-{{ invoice.customer.address }}<br>
-GSTIN: {{ invoice.customer.gstin }}<br>
-State: {{ invoice.customer.state }}
+
+<td rowspan="5">
+<b>{{ invoice.customer.name }}</b><br>
+{{ invoice.customer.address }}<br><br>
+
+<b>Contact :</b> {{ invoice.customer.phone }}<br>
+<b>State :</b> {{ invoice.customer.state }}<br>
+<b>Place of Supply :</b> {{ invoice.customer.state }}<br>
+<b>GSTIN :</b> {{ invoice.customer.gstin|default:"-" }}<br>
+<b>PAN :</b> {{ invoice.customer.pan|default:"-" }}
 </td>
 
-<td width="50%">
-<b>Buyer (Bill to)</b><br>
-{{ invoice.customer.name }}<br>
-{{ invoice.customer.address }}<br>
-GSTIN: {{ invoice.customer.gstin }}<br>
-State: {{ invoice.customer.state }}
-</td>
+<td>Invoice No</td>
+<td>{{ invoice.id }}</td>
+<td>Date</td>
+<td>{{ invoice.date|date:"d/m/Y" }}</td>
+
 </tr>
+
+<tr><td>Challan No</td><td>-</td><td>Date</td><td>-</td></tr>
+<tr><td>P.O No</td><td>-</td><td>Date</td><td>-</td></tr>
+<tr><td>Transport</td><td>-</td><td>L.R No</td><td>-</td></tr>
+<tr><td>Total Package</td><td>1</td><td>Payment Days</td><td>0</td></tr>
+
 </table>
 
-<table>
-<tr>
-<td width="50%">Delivery Note</td>
-<td width="50%">Mode/Terms of Payment</td>
-</tr>
+<!-- PRODUCT TABLE -->
+<table width="100%" border="1" cellspacing="0" cellpadding="2">
 
 <tr>
-<td width="50%">Dispatch Doc No.</td>
-<td width="50%">Delivery Note Date</td>
-</tr>
-
-<tr>
-<td width="50%">Dispatched through</td>
-<td width="50%">Destination</td>
-</tr>
-
-<tr>
-<td>Terms of Delivery</td>
-<td width="50%"></td>
-</tr>
-</table>
-
-<table>
-<tr>
-<th>Sl</th>
-<th>Description of Goods</th>
-<th>HSN/SAC</th>
-<th>GST%</th>
-<th>Qty</th>
-<th>Rate</th>
-<th>Amount</th>
+<th style="width:30px;">No</th>
+<th style="width:150px;">Product Name</th>
+<th style="width:60px;">HSN</th>
+<th style="width:50px;">Qty</th>
+<th style="width:70px;">Rate</th>
+<th style="width:60px;">GST%</th>
+<th style="width:100px;">Amount</th>
 </tr>
 
 {% for item in items %}
-<tr>
+<tr class="row">
 <td>{{ forloop.counter }}</td>
 <td>{{ item.product.name }}</td>
 <td>{{ item.product.hsn|default:"-" }}</td>
-<td>{{ item.product.gst|default:"18" }}%</td>
-<td>{{ item.quantity }} Pcs</td>
-<td>{{ item.product.price }}</td>
-<td>{{ item.subtotal }}</td>
+<td class="center">{{ item.quantity }}</td>
+<td class="right">{{ item.price }}</td>
+<td class="center">{{ item.product.gst }}%</td>
+<td class="right">{{ item.subtotal }}</td>
 </tr>
 {% endfor %}
 
-<tr>
-<td colspan="6" class="right"><b>Total</b></td>
-<td><b>{{ invoice.subtotal }}</b></td>
+<!-- EMPTY ROWS -->
+{% for i in "123456789012345" %}
+{% if forloop.counter > items|length %}
+<tr class="row">
+<td>&nbsp;</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
 </tr>
-</table>
-
-<table>
-<tr>
-<td class="right">CGST</td>
-<td>{{ invoice.cgst }}</td>
-</tr>
-
-<tr>
-<td class="right">SGST</td>
-<td>{{ invoice.sgst }}</td>
-</tr>
-
-<tr>
-<td class="right"><b>Total ₹</b></td>
-<td><b>{{ invoice.total }}</b></td>
-</tr>
-</table>
-
-<br>
-
-<b>Amount Chargeable (in words)</b><br>
-{{ invoice.amount_words|default:"NOT COMING" }} Only
-
-<br><br>
-
-<table>
-<tr>
-<th>HSN/SAC</th>
-<th>Taxable Value</th>
-<th>CGST</th>
-<th>SGST</th>
-<th>Total Tax</th>
-</tr>
-
-{% for h in hsn_data %}
-<tr>
-<td>{{ h.hsn }}</td>
-<td>{{ h.taxable }}</td>
-<td>{{ h.cgst }}</td>
-<td>{{ h.sgst }}</td>
-<td>{{ h.total_tax }}</td>
-</tr>
+{% endif %}
 {% endfor %}
+
+<!-- TOTAL -->
+<tr>
+<td colspan="5"></td>
+<td class="right"><b>Sub Total</b></td>
+<td class="right"><b>{{ invoice.subtotal }}</b></td>
+</tr>
+
 </table>
 
-<br>
-
-<b>Declaration</b><br>
-We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.
-
-<br><br>
-
-<table class="no-border">
+<!-- FOOTER -->
+<table>
 <tr>
+
 <td>
-<b>Company's Bank Details</b><br>
-A/c Holder's Name: Radhe Furniture<br>
-Bank Name: HDFC Bank<br>
-A/c No: 1234567890<br>
-IFSC: HDFC0000001
+Bank Name : BANK OF BARODA<br>
+A/c No : 03260200001308<br>
+IFSC Code : BARB0XXXXX<br><br>
+
+Amount : {{ invoice.amount_words }} Only
 </td>
 
-<td class="right">
-for Radhe Furniture<br><br><br>
-Authorised Signatory
+<td>
+Taxable Amount : {{ invoice.subtotal }}<br>
+CGST 9% : {{ invoice.cgst }}<br>
+SGST 9% : {{ invoice.sgst }}<br>
+Round Off : 0<br>
+<b>Grand Total : {{ invoice.total }}</b>
 </td>
+
 </tr>
 </table>
 
-<br>
+<!-- TERMS -->
+<table>
+<tr>
 
-<center>SUBJECT TO AHMEDABAD JURISDICTION</center>
-<center>This is a Computer Generated Invoice</center>
+<td style="border-right:none;">
+<b>Terms & Conditions</b><br>
+Goods once sold will not be taken back.<br>
+Interest @18% p.a. after due date.<br>
+Subject to Ahmedabad jurisdiction.
+</td>
 
+<td style="border-left:none;">
+For RADHE FURNITURE<br><br><br>
+<b>Authorised Signatory</b>
+</td>
+
+</tr>
+</table>
 {% if not pdf %}
 <div class="btns">
     <button class="btn print" onclick="window.print()">Print</button>
@@ -199,5 +219,7 @@ Authorised Signatory
     <a href="{% url 'invoice_list' %}" class="btn back">Back</a>
 </div>
 {% endif %}
+</div>
+
 </body>
 </html>

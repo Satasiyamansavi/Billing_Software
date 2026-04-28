@@ -1,106 +1,148 @@
 {% extends 'base.html' %}
-
 {% block content %}
 
-<div class="container mt-4">
+<h2 class="mb-4 fw-semibold">Create Invoice</h2>
 
-    <div class="card shadow-lg border-0">
+{% if error %}
+<div class="alert alert-danger">{{ error }}</div>
+{% endif %}
 
-        <div class="card-header bg-primary text-white">
-            <h4 class="mb-0">🧾 Create Invoice</h4>
-        </div>
+<form method="post" class="card p-4 mb-4 shadow-sm">
+    {% csrf_token %}
 
-        <div class="card-body">
+    <label>Customer</label>
+    <select name="customer" class="form-control mb-2" onchange="setCustomer(this)">
+        <option value="">Select</option>
+        {% for c in customers %}
+        <option value="{{ c.id }}">{{ c.name }}</option>
+        {% endfor %}
+    </select>
 
-            <form method="post">
-                {% csrf_token %}
+    <div class="mb-3">
 
-                <div class="row mb-3">
+    <p><strong>State:</strong> <span id="cust_state">-</span></p>
+    <p><strong>Phone:</strong> <span id="cust_phone">-</span></p>
+    <p><strong>Address:</strong> <span id="cust_address">-</span></p>
 
-                    <div class="col-md-6">
-                        <label class="form-label fw-bold">Customer</label>
-                        <select name="customer" class="form-control" required>
-                            <option value="">Select Customer</option>
-                            {% for c in customers %}
-                                <option value="{{ c.id }}">{{ c.name }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
+    <label class="fw-semibold">Discount (%)</label>
+    <input type="number" id="cust_discount" name="cust_discount"   class="form-control" value="0" oninput="calcTotal()">
 
-                    <div class="col-md-6">
-                        <label class="form-label fw-bold">Branch</label>
-                        <select name="branch" class="form-control" required>
-                            <option value="">Select Branch</option>
-                            {% for b in branches %}
-                                <option value="{{ b.id }}">{{ b.name }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
+    </div>
 
-                </div>
+    <label>Branch</label>
+    <select name="branch" class="form-control mb-3">
+        {% for b in branches %}
+        <option value="{{ b.id }}">{{ b.name }}</option>
+        {% endfor %}
+    </select>
 
-                <hr>
+    <hr>
 
-                <h5 class="fw-bold mb-3">📦 Products</h5>
+    <div id="items">
 
-                <div id="items">
+        <div class="row g-2 mb-2 item-row">
 
-                    <div class="row g-2 mb-2 item-row">
+            <div class="col-md-3">
+                <select name="product[]" class="form-control" onchange="setPrice(this)">
+                    <option value="">Product</option>
+                    {% for p in products %}
+                    <option value="{{ p.id }}">{{ p.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
 
-                        <div class="col-md-8">
-                            <select name="product[]" class="form-control" required>
-                                <option value="">Select Product</option>
-                                {% for p in products %}
-                                    <option value="{{ p.id }}">
-                                        {{ p.name }} (Stock: {{ p.total_stock }})
-                                    </option>
-                                {% endfor %}
-                            </select>
-                        </div>
+            <div class="col-md-2">
+                <input type="text" class="form-control price" placeholder="Rate" readonly>
+            </div>
 
-                        <div class="col-md-3">
-                            <input type="number" name="qty[]" class="form-control" placeholder="Qty" required>
-                        </div>
+            <div class="col-md-2">
+                <input type="number" name="qty[]" class="form-control qty" placeholder="Qty" oninput="calcRow(this)">
+            </div>
 
-                        <div class="col-md-1 d-flex align-items-center">
-                            <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)">
-                                ✖
-                            </button>
-                        </div>
+            <div class="col-md-2">
+                <input type="text" class="form-control total" placeholder="Total" readonly>
+            </div>
 
-                    </div>
-
-                </div>
-
-                <button type="button" class="btn btn-success mt-2" onclick="addRow()">
-                    ➕ Add Item
-                </button>
-
-                <hr>
-
-                <button class="btn btn-primary w-100 mt-2">
-                    🚀 Generate Invoice
-                </button>
-
-            </form>
+            <div class="col-md-3">
+                <button type="button" class="btn btn-danger w-100" onclick="removeRow(this)">Remove</button>
+            </div>
 
         </div>
 
     </div>
 
-</div>
+    <button type="button" class="btn btn-success mt-2" onclick="addRow()">+ Add</button>
+
+    <hr>
+
+    <h5>Total: ₹ <span id="grand_total">0</span></h5>
+
+    <button class="btn btn-primary w-100 mt-2">Generate Invoice</button>
+
+</form>
 
 <script>
-function addRow() {
+const customers = {{ customer_json|safe }};
+const products = {{ product_json|safe }};
+
+// CUSTOMER
+function setCustomer(sel){
+    let c = customers[sel.value] || {};
+
+    // Show details
+    document.getElementById('cust_state').innerText = c.state || '-';
+    document.getElementById('cust_phone').innerText = c.phone || '-';
+    document.getElementById('cust_address').innerText = c.address || '-';
+
+    // Set default discount (editable)
+    document.getElementById('cust_discount').value = c.discount || 0;
+
+    calcTotal();
+}
+// PRODUCT PRICE
+function setPrice(sel){
+    let row = sel.closest('.item-row');
+    let price = products[sel.value]?.price || 0;
+    row.querySelector('.price').value = price;
+    calcRow(row.querySelector('.qty'));
+}
+
+// ROW TOTAL
+function calcRow(input){
+    let row = input.closest('.item-row');
+    let price = parseFloat(row.querySelector('.price').value)||0;
+    let qty = parseFloat(row.querySelector('.qty').value)||0;
+    row.querySelector('.total').value = (price*qty).toFixed(2);
+    calcTotal();
+}
+
+// GRAND TOTAL
+function calcTotal(){
+    let total=0;
+    document.querySelectorAll('.total').forEach(t=>{
+        total += parseFloat(t.value)||0;
+    });
+
+    let d = parseFloat(document.getElementById('cust_discount').value)||0;
+    total = total - (total*d/100);
+
+    document.getElementById('grand_total').innerText = total.toFixed(2);
+}
+
+// ADD ROW
+function addRow(){
     let row = document.querySelector('.item-row').cloneNode(true);
-    row.querySelectorAll('input').forEach(i => i.value = "");
+    row.querySelectorAll('input').forEach(i=>i.value="");
+    row.querySelectorAll('select').forEach(s=>s.selectedIndex=0);
     document.getElementById('items').appendChild(row);
 }
 
-function removeRow(btn) {
+// REMOVE
+function removeRow(btn){
     let row = btn.closest('.item-row');
-    if (document.querySelectorAll('.item-row').length > 1) {
+    if(document.querySelectorAll('.item-row').length>1){
         row.remove();
+        calcTotal();
     }
 }
 </script>

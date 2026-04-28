@@ -1,6 +1,9 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
+import random
+import string
+
 
 
 # USER ROLE
@@ -60,10 +63,35 @@ class Customer(models.Model):
     address = models.TextField()
     state = models.CharField(max_length=50, default="Gujarat")
     gstin = models.CharField(max_length=20, blank=True, null=True)
-
+    discount = models.FloatField(default=0)   
+    pan = models.CharField(max_length=10, blank=True, null=True)   
     def __str__(self):
         return self.name
 
+    def generate_pan(self):
+        letters = ''.join(random.choices(string.ascii_uppercase, k=5))
+        numbers = ''.join(random.choices(string.digits, k=4))
+        last = random.choice(string.ascii_uppercase)
+        return letters + numbers + last
+
+    def generate_gstin(self):
+        state_code = "24"  # Gujarat
+
+        if not self.pan:
+            self.pan = self.generate_pan()
+
+        entity = "1"
+        return f"{state_code}{self.pan}{entity}Z5"
+
+    def save(self, *args, **kwargs):
+
+        if not self.pan:
+           self.pan = self.generate_pan()
+
+        if not self.gstin:
+           self.gstin = self.generate_gstin()
+
+        super().save(*args, **kwargs)
 
 # SUPPLIER
 class Supplier(models.Model):
@@ -80,7 +108,7 @@ class Invoice(models.Model):
     branch = models.ForeignKey(Branch, on_delete=models.CASCADE, null=True, blank=True)
     total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     subtotal = models.FloatField(default=0)
-
+    discount = models.FloatField(default=0)
     cgst = models.FloatField(default=0)
     sgst = models.FloatField(default=0)
     igst = models.FloatField(default=0)
@@ -96,6 +124,9 @@ class InvoiceItem(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
     quantity = models.IntegerField()
     subtotal = models.FloatField()
+    price = models.FloatField(null=True, blank=True)
+    hsn = models.CharField(max_length=20, blank=True, null=True)
+
 
 
 # PAYMENT

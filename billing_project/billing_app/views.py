@@ -45,18 +45,15 @@ def login_view(request):
         if user:
             login(request, user)
 
-            # 🔥 Ensure UserProfile exists
             profile, created = UserProfile.objects.get_or_create(
                 user=user,
-                defaults={'role': 'Staff'}  # default
+                defaults={'role': 'Staff'}  
             )
 
-            # 🔥 AUTO SET: if username = Dealer → role = Dealer
             if user.username.lower() == "dealer":
                 profile.role = "Dealer"
                 profile.save()
 
-                # 🔥 Ensure Dealer table entry exists
                 Dealer.objects.get_or_create(
                     user=user,
                     defaults={'phone': '0000000000'}
@@ -64,7 +61,6 @@ def login_view(request):
 
             role = profile.role
 
-            # 🔀 Redirect based on role
             if role == 'Admin':
                 return redirect('dashboard')
 
@@ -181,16 +177,34 @@ def delete_product(request, id):
 
 
 # 🧾 INVOICE (GST UPDATED)
+
 def create_invoice(request):
     customers = Customer.objects.all()
     branches = Branch.objects.all()
     products = Product.objects.all()
 
-    # ✅ ADD REAL STOCK TO PRODUCTS
+    # STOCK
     for p in products:
         p.total_stock = BranchStock.objects.filter(product=p).aggregate(
             total=Sum('stock')
         )['total'] or 0
+
+    customer_data = {
+        c.id: {
+            "name": c.name,
+            "discount": getattr(c, 'discount', 0),
+            "state": c.state,
+            "phone": getattr(c, 'phone', ''),
+            "address": c.address,
+        } for c in customers
+    }
+
+    product_data = {
+        p.id: {
+            "name": p.name,
+            "price": float(p.price)
+        } for p in products
+    }
 
     if request.method == "POST":
         customer = Customer.objects.get(id=request.POST.get('customer'))
@@ -199,10 +213,11 @@ def create_invoice(request):
         product_ids = request.POST.getlist('product[]')
         qtys = request.POST.getlist('qty[]')
 
+        discount = float(request.POST.get('cust_discount', 0))
+
         subtotal = 0
         items_data = []
 
-        # 🔥 VALIDATION
         for p_id, q in zip(product_ids, qtys):
             if not q:
                 continue
@@ -210,7 +225,7 @@ def create_invoice(request):
             product = Product.objects.get(id=p_id)
             qty = int(q)
 
-            branch_stock, created = BranchStock.objects.get_or_create(
+            branch_stock, _ = BranchStock.objects.get_or_create(
                 product=product,
                 branch=branch,
                 defaults={'stock': 0}
@@ -221,53 +236,55 @@ def create_invoice(request):
                     'error': f"Not enough stock in {branch.name} for {product.name}",
                     'customers': customers,
                     'products': products,
-                    'branches': branches
+                    'branches': branches,
+                    'customer_json': json.dumps(customer_data),
+                    'product_json': json.dumps(product_data),
                 })
 
-            item_total = product.price * qty
+            # ✅ Discounted Rate
+            discounted_price = product.price - (product.price * discount / 100)
+
+            # ✅ Base Amount
+            base_total = discounted_price * qty
+
+            # ✅ GST per item
+            gst = product.gst or 18
+            gst_amount = base_total * gst / 100
+
+            # ✅ FINAL AMOUNT (WITH GST)
+            item_total = base_total + gst_amount
+
             subtotal += item_total
 
-            items_data.append((product, qty, item_total))
+            items_data.append((product, qty, discounted_price, item_total))
 
-        # ✅ GST
+        # ❌ NO GST AGAIN (already included)
         cgst = sgst = igst = 0
 
-        if customer.state == "Gujarat":
-            cgst = subtotal * 0.09
-            sgst = subtotal * 0.09
-        else:
-            igst = subtotal * 0.18
+        total = subtotal
 
-        total = subtotal + cgst + sgst + igst
-
-        # ✅ CREATE INVOICE
-        words = amount_in_words(int(round(total)))        
         invoice = Invoice.objects.create(
             customer=customer,
             branch=branch,
-            subtotal=subtotal,
-            cgst=cgst,
-            sgst=sgst,
-            igst=igst,
+            subtotal=round(subtotal, 2),
+            cgst=0,
+            sgst=0,
+            igst=0,
             total=round(total),
-            amount_words=words   # ✅ ADD THIS
+            amount_words=amount_in_words(round(total))
         )
 
-        # ✅ SAVE ITEMS + REDUCE STOCK
-        for product, qty, item_total in items_data:
-
+        for product, qty, price, item_total in items_data:
             InvoiceItem.objects.create(
                 invoice=invoice,
                 product=product,
                 quantity=qty,
-                subtotal=item_total
+                price=round(price, 2),       # discounted rate
+                subtotal=round(item_total, 2),
+                hsn=product.hsn  # WITH GST
             )
 
-            branch_stock = BranchStock.objects.get(
-                product=product,
-                branch=branch
-            )
-
+            branch_stock = BranchStock.objects.get(product=product, branch=branch)
             branch_stock.stock = F('stock') - qty
             branch_stock.save()
 
@@ -276,7 +293,9 @@ def create_invoice(request):
     return render(request, 'invoice.html', {
         'customers': customers,
         'products': products,
-        'branches': branches
+        'branches': branches,
+        'customer_json': json.dumps(customer_data),
+        'product_json': json.dumps(product_data),
     })
 
 # 👁️ VIEW INVOICE
@@ -284,21 +303,25 @@ from collections import defaultdict
 
 def view_invoice(request, id):
     invoice = Invoice.objects.get(id=id)
-
-    # 🔥 IMPORTANT
     items = InvoiceItem.objects.filter(invoice=invoice).select_related('product')
-
-    print("ITEM COUNT:", items.count())
 
     hsn_summary = defaultdict(lambda: {'taxable':0, 'cgst':0, 'sgst':0})
 
     for item in items:
-        hsn = item.product.hsn or "N/A"
-        taxable = item.subtotal
+        # ✅ FIX HERE
+        hsn = item.hsn or "N/A"
 
         gst = item.product.gst or 18
-        cgst = taxable * (gst/2) / 100
-        sgst = taxable * (gst/2) / 100
+
+        total_with_gst = item.subtotal
+
+        # reverse GST
+        taxable = total_with_gst / (1 + gst/100)
+
+        gst_amount = total_with_gst - taxable
+
+        cgst = gst_amount / 2
+        sgst = gst_amount / 2
 
         hsn_summary[hsn]['taxable'] += taxable
         hsn_summary[hsn]['cgst'] += cgst
@@ -314,8 +337,6 @@ def view_invoice(request, id):
         }
         for hsn, val in hsn_summary.items()
     ]
-
-    print("HSN DATA:", hsn_data)
 
     return render(request, 'invoice_view.html', {
         'invoice': invoice,
@@ -494,35 +515,41 @@ from django.shortcuts import get_object_or_404
 from xhtml2pdf import pisa
 from collections import defaultdict
 
+
 def generate_invoice_pdf(request, id):
     invoice = get_object_or_404(Invoice, id=id)
     items = InvoiceItem.objects.filter(invoice=invoice).select_related('product')
 
-    # 🔥 HSN SUMMARY CALCULATION
+    # HSN SUMMARY
     hsn_summary = defaultdict(lambda: {'taxable': 0, 'cgst': 0, 'sgst': 0})
 
     for item in items:
-        hsn = item.product.hsn or "N/A"
-        taxable = item.subtotal
-
+        hsn = item.hsn or "N/A"   # ✅ FIX
+    
         gst = item.product.gst or 18
-        cgst = taxable * (gst / 2) / 100
-        sgst = taxable * (gst / 2) / 100
-
+    
+        total_with_gst = item.subtotal
+    
+        taxable = total_with_gst / (1 + gst/100)
+    
+        gst_amount = total_with_gst - taxable
+    
+        cgst = gst_amount / 2
+        sgst = gst_amount / 2
+    
         hsn_summary[hsn]['taxable'] += taxable
         hsn_summary[hsn]['cgst'] += cgst
         hsn_summary[hsn]['sgst'] += sgst
 
-    hsn_data = [
-        {
+    hsn_data = []
+    for h, v in hsn_summary.items():
+        hsn_data.append({
             'hsn': h,
             'taxable': round(v['taxable'], 2),
             'cgst': round(v['cgst'], 2),
             'sgst': round(v['sgst'], 2),
             'total_tax': round(v['cgst'] + v['sgst'], 2)
-        }
-        for h, v in hsn_summary.items()
-    ]
+        })
 
     template = get_template('invoice_view.html')
 
@@ -530,13 +557,16 @@ def generate_invoice_pdf(request, id):
         'invoice': invoice,
         'items': items,
         'hsn_data': hsn_data,
-        'pdf': True   # 🔥 hide buttons
+        'pdf': True
     })
 
     response = HttpResponse(content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="invoice_{invoice.id}.pdf"'
 
-    pisa.CreatePDF(html, dest=response)
+    pisa_status = pisa.CreatePDF(html, dest=response)
+
+    if pisa_status.err:
+        return HttpResponse("PDF Error")
 
     return response
 
