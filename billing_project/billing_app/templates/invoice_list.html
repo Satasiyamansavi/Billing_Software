@@ -84,10 +84,9 @@
                         </td>
 
                         <td class="text-center">
-                            <form action="{% url 'delete_invoice' d.invoice.id %}" method="POST"
-                                  onsubmit="return confirm('Delete this invoice?');">
+                            <form action="{% url 'delete_invoice' d.invoice.id %}" method="POST">
                                 {% csrf_token %}
-                                <button class="btn btn-sm btn-light border">
+                                <button type="submit" class="btn btn-sm btn-light border">
                                     <i class="fas fa-trash text-danger"></i>
                                 </button>
                             </form>

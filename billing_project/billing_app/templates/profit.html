@@ -1,47 +1,85 @@
 {% extends 'base.html' %}
 {% block content %}
 
-<h3 class="mb-4">📊 Profit Report</h3>
+<h3 class="mb-4">📊 Profit Dashboard</h3>
 
-<div class="row">
+<!-- FILTER -->
+<form method="get" class="mb-3">
+    <select name="filter" onchange="this.form.submit()" class="form-select w-auto">
+        <option value="daily" {% if selected_filter == 'daily' %}selected{% endif %}>Daily</option>
+        <option value="weekly" {% if selected_filter == 'weekly' %}selected{% endif %}>Weekly</option>
+        <option value="monthly" {% if selected_filter == 'monthly' %}selected{% endif %}>Monthly</option>
+        <option value="yearly" {% if selected_filter == 'yearly' %}selected{% endif %}>Yearly</option>
+    </select>
+</form>
 
-    <div class="col-md-4 mb-3">
-        <div class="card shadow border-0 text-white" style="background:#007bff;">
-            <div class="card-body text-center">
-                <h5>Total Sales</h5>
-                <h2>₹{{ sales }}</h2>
-            </div>
+<!-- TOTAL CARDS -->
+<div class="row mb-4">
+
+    <div class="col-md-4">
+        <div class="card bg-primary text-white text-center p-3 shadow">
+            <h5>Sales</h5>
+            <h2>₹{{ total_sales }}</h2>
         </div>
     </div>
 
-    <div class="col-md-4 mb-3">
-        <div class="card shadow border-0 text-white" style="background:#ffc107;">
-            <div class="card-body text-center">
-                <h5>Total Purchase</h5>
-                <h2>₹{{ purchase }}</h2>
-            </div>
+    <div class="col-md-4">
+        <div class="card bg-warning text-white text-center p-3 shadow">
+            <h5>Purchase</h5>
+            <h2>₹{{ total_purchase }}</h2>
         </div>
     </div>
 
-    <div class="col-md-4 mb-3">
-        <div class="card shadow border-0 text-white 
-            {% if profit >= 0 %}bg-success{% else %}bg-danger{% endif %}">
-            <div class="card-body text-center">
-                <h5>Profit</h5>
-                <h2>₹{{ profit }}</h2>
-            </div>
+    <div class="col-md-4">
+        <div class="card text-white text-center p-3 shadow 
+        {% if total_profit >= 0 %}bg-success{% else %}bg-danger{% endif %}">
+            <h5>Profit</h5>
+            <h2>₹{{ total_profit }}</h2>
         </div>
     </div>
 
 </div>
 
+<!-- TABLE -->
+<div class="card shadow p-3">
+
+    <h5 class="mb-3">📅 Breakdown</h5>
+
+    <table class="table table-bordered text-center">
+        <thead>
+            <tr>
+                <th>Period</th>
+                <th>Sales</th>
+                <th>Purchase</th>
+                <th>Profit</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {% for row in table_data %}
+            <tr>
+                <td>{{ row.period }}</td>
+                <td>₹{{ row.sales }}</td>
+                <td>₹{{ row.purchase }}</td>
+                <td class="{% if row.profit >= 0 %}text-success{% else %}text-danger{% endif %}">
+                    ₹{{ row.profit }}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+
+    </table>
+
+</div>
+
+<!-- SUMMARY -->
 <div class="card shadow p-3 mt-4">
     <h5>📌 Summary</h5>
 
-    {% if profit > 0 %}
-        <p class="text-success">✅ You are in Profit</p>
-    {% elif profit < 0 %}
-        <p class="text-danger">⚠️ You are in Loss</p>
+    {% if total_profit > 0 %}
+        <p class="text-success">✅ Business is in Profit</p>
+    {% elif total_profit < 0 %}
+        <p class="text-danger">⚠️ Business is in Loss</p>
     {% else %}
         <p class="text-secondary">No Profit No Loss</p>
     {% endif %}

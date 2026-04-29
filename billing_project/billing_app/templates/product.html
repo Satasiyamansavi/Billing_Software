@@ -38,6 +38,7 @@
                     <th>Name</th>
                     <th>Branch Stock</th>
                     <th>Brand</th>
+                    <th>HSN</th>
                     <th>Price</th>
                     <th>Total Stock</th>
                     <th>Status</th>
@@ -61,13 +62,14 @@
                         </ul>
                     </td>
                     <td>{{ p.brand }}</td>
+                    <td>{{ p.hsn|default:"-" }}</td>
                     <td>₹{{ p.price }}</td>
 
                     <td class="fw-bold ">
                         {{ p.total_stock }}
                     </td>
                     <td>
-                        {% if p.stock <= p.low_stock_limit %}
+                        {% if p.total_stock <= p.low_stock_limit %}
                             <span class="badge bg-danger">Low Stock</span>
                         {% else %}
                             <span class="badge bg-success">In Stock</span>

@@ -1,32 +1,153 @@
 {% extends 'base.html' %}
-
 {% block content %}
 
-<h2 class="mb-4">Dashboard</h2>
+<h4 class="mb-3">📊 Dashboard</h4>
 
-<div class="row">
+<!-- FILTER -->
+<form method="get" class="mb-3">
+    <select name="filter" onchange="this.form.submit()" class="form-select w-auto">
+        <option value="daily" {% if selected_filter == 'daily' %}selected{% endif %}>Daily</option>
+        <option value="weekly" {% if selected_filter == 'weekly' %}selected{% endif %}>Weekly</option>
+        <option value="monthly" {% if selected_filter == 'monthly' %}selected{% endif %}>Monthly</option>
+        <option value="yearly" {% if selected_filter == 'yearly' %}selected{% endif %}>Yearly</option>
+    </select>
+</form>
 
-    <div class="col-md-3">
-        <div class="card p-3 text-center shadow">
-            <h5>Customers</h5>
-            <h3>{{ customer_count }}</h3>
+<style>
+.card-box {
+    border: 1px solid #eee;
+    border-radius: 12px;
+    padding: 15px;
+    text-align: center;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.small-text { font-size: 13px; color: #777; }
+.big-text { font-size: 20px; font-weight: bold; }
+
+.chart-box {
+    background: #fff;
+    padding: 15px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+canvas { max-height: 320px; }
+</style>
+
+<!-- SUMMARY -->
+<div class="row g-3 mb-3">
+    <div class="col-md-2"><div class="card-box"><div class="small-text">Customers</div><div class="big-text">{{ customer_count }}</div></div></div>
+    <div class="col-md-2"><div class="card-box"><div class="small-text">Products</div><div class="big-text">{{ product_count }}</div></div></div>
+    <div class="col-md-2"><div class="card-box"><div class="small-text">Invoices</div><div class="big-text">{{ invoice_count }}</div></div></div>
+    <div class="col-md-2"><div class="card-box"><div class="small-text">Sales</div><div class="big-text">₹{{ total_sales }}</div></div></div>
+    <div class="col-md-2"><div class="card-box"><div class="small-text">Purchase</div><div class="big-text">₹{{ total_purchase }}</div></div></div>
+    <div class="col-md-2"><div class="card-box"><div class="small-text">Profit</div><div class="big-text">₹{{ profit_total }}</div></div></div>
+</div>
+
+<!-- CHARTS -->
+<div class="row g-3 mb-4">
+
+    <div class="col-md-8">
+        <div class="chart-box">
+            <canvas id="barChart"></canvas>
         </div>
     </div>
 
-    <div class="col-md-3">
-        <div class="card p-3 text-center shadow">
-            <h5>Products</h5>
-            <h3>{{ product_count }}</h3>
-        </div>
-    </div>
-
-    <div class="col-md-3">
-        <div class="card p-3 text-center shadow">
-            <h5>Invoices</h5>
-            <h3>{{ invoice_count }}</h3>
+    <div class="col-md-4">
+        <div class="chart-box">
+            <canvas id="donutChart"></canvas>
         </div>
     </div>
 
 </div>
+
+<!-- TABLE -->
+<div class="card p-3 shadow-sm">
+    <table class="table table-sm text-center mb-0">
+        <thead>
+            <tr>
+                <th>Period</th>
+                <th>Sales</th>
+                <th>Purchase</th>
+                <th>Profit</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {% for row in table_data %}
+            <tr>
+                <td>{{ row.period }}</td>
+                <td>₹{{ row.sales }}</td>
+                <td>₹{{ row.purchase }}</td>
+                <td>₹{{ row.profit }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+
+    </table>
+</div>
+
+<!-- CHART JS -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+
+const labels = {{ months|safe }};
+const sales = {{ sales|safe }};
+const purchase = {{ purchase|safe }};
+const profit = {{ profit|safe }};
+
+// BAR CHART (ALL DATA)
+new Chart(document.getElementById('barChart'), {
+    type: 'bar',
+    data: {
+        labels: labels,
+        datasets: [
+            {
+                label: 'Sales',
+                data: sales,
+                backgroundColor: '#4e73df'
+            },
+            {
+                label: 'Purchase',
+                data: purchase,
+                backgroundColor: '#e74a3b'
+            },
+            {
+                label: 'Profit',
+                data: profit,
+                backgroundColor: '#1cc88a'
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        scales: {
+            y: { beginAtZero: true }
+        }
+    }
+});
+
+// DONUT CHART
+new Chart(document.getElementById('donutChart'), {
+    type: 'doughnut',
+    data: {
+        labels: ['Sales', 'Purchase', 'Profit'],
+        datasets: [{
+            data: [{{ total_sales }}, {{ total_purchase }}, {{ profit_total }}],
+            backgroundColor: ['#4e73df', '#e74a3b', '#1cc88a']
+        }]
+    },
+    options: {
+        cutout: '70%',
+        plugins: {
+            legend: { position: 'bottom' }
+        }
+    }
+});
+
+</script>
 
 {% endblock %}

@@ -8,7 +8,9 @@ from io import BytesIO
 from django.contrib.auth.decorators import user_passes_test
 from .models import Dealer, DealerOrder, DealerOrderItem, Product
 from .utils.common import amount_in_words
-from .models import Invoice, InvoiceItem
+from .models import Invoice, InvoiceItem , Purchase
+from decimal import Decimal
+from django.db.models import Sum
 
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
 from reportlab.lib import colors
@@ -81,16 +83,104 @@ def logout_view(request):
     return redirect('login')
 
 
-# 📊 DASHBOARD
-@login_required
-def dashboard(request):
-    return render(request, 'dashboard.html', {
-        'customer_count': Customer.objects.count(),
-        'product_count': Product.objects.count(),
-        'invoice_count': Invoice.objects.count(),
-        'low_stock': Product.objects.filter(stock__lte=F('low_stock_limit'))  # ✅ UPDATED
-    })
+from django.db.models import Sum
+from django.db.models.functions import TruncMonth, TruncDay, TruncYear, TruncWeek
+from decimal import Decimal
+import json
+from .models import Customer, Product, Invoice, Purchase
 
+
+def dashboard(request):
+
+    filter_type = request.GET.get('filter', 'monthly')
+
+    # COUNTS
+    customer_count = Customer.objects.count()
+    product_count = Product.objects.count()
+    invoice_count = Invoice.objects.count()
+
+    # TOTALS (SAFE)
+    total_sales = Invoice.objects.aggregate(total=Sum('total'))['total'] or 0
+    total_purchase = Purchase.objects.aggregate(total=Sum('total'))['total'] or 0
+
+    total_sales = Decimal(str(total_sales))
+    total_purchase = Decimal(str(total_purchase))
+
+    profit_total = total_sales - total_purchase
+
+    # FILTER LOGIC
+    if filter_type == "daily":
+        sales_qs = Invoice.objects.annotate(d=TruncDay('date'))
+        purchase_qs = Purchase.objects.annotate(d=TruncDay('date'))
+        fmt = "%d %b"
+
+    elif filter_type == "weekly":
+        sales_qs = Invoice.objects.annotate(d=TruncWeek('date'))
+        purchase_qs = Purchase.objects.annotate(d=TruncWeek('date'))
+        fmt = "Week %W"
+
+    elif filter_type == "yearly":
+        sales_qs = Invoice.objects.annotate(d=TruncYear('date'))
+        purchase_qs = Purchase.objects.annotate(d=TruncYear('date'))
+        fmt = "%Y"
+
+    else:
+        sales_qs = Invoice.objects.annotate(d=TruncMonth('date'))
+        purchase_qs = Purchase.objects.annotate(d=TruncMonth('date'))
+        fmt = "%b %Y"
+
+    sales_data = sales_qs.values('d').annotate(total=Sum('total')).order_by('d')
+    purchase_data = purchase_qs.values('d').annotate(total=Sum('total')).order_by('d')
+
+    # MAP PURCHASE
+    purchase_map = {
+        item['d']: Decimal(str(item['total'] or 0))
+        for item in purchase_data
+    }
+
+    table_data = []
+    labels, sales, purchase, profit = [], [], [], []
+
+    for item in sales_data:
+        date = item['d']
+
+        s = Decimal(str(item['total'] or 0))
+        p = purchase_map.get(date, Decimal('0'))
+        pr = s - p
+
+        label = date.strftime(fmt)
+
+        # TABLE DATA
+        table_data.append({
+            "period": label,
+            "sales": float(s),
+            "purchase": float(p),
+            "profit": float(pr),
+        })
+
+        labels.append(label)
+        sales.append(float(s))
+        purchase.append(float(p))
+        profit.append(float(pr))
+
+    return render(request, 'dashboard.html', {
+        'customer_count': customer_count,
+        'product_count': product_count,
+        'invoice_count': invoice_count,
+
+        'total_sales': float(total_sales),
+        'total_purchase': float(total_purchase),
+        'profit_total': float(profit_total),
+
+        'table_data': table_data,
+
+        'months': json.dumps(labels),
+        'sales': json.dumps(sales),
+        'purchase': json.dumps(purchase),
+        'profit': json.dumps(profit),
+
+        'selected_filter': filter_type
+    })
 
 # 👤 CUSTOMER
 def customer_list(request):
@@ -373,8 +463,6 @@ def delete_invoice(request, id):
     return redirect('invoice_list')
 
 # 💳 PAYMENT
-from decimal import Decimal
-
 def payment(request):
     if request.method == "POST":
         amount = Decimal(request.POST.get('amount'))
@@ -443,26 +531,94 @@ def purchase_list(request):
 
 
 # ⚠️ LOW STOCK (UPDATED)
+from django.db.models import F, Q
+
 def low_stock(request):
-    items = Product.objects.filter(stock__lte=F('low_stock_limit'))  # ✅ UPDATED
+    products = Product.objects.all()
+
+    items = []
+
+    for p in products:
+        total_stock = BranchStock.objects.filter(product=p).aggregate(
+            total=Sum('stock')
+        )['total'] or 0
+
+        if total_stock <= (p.low_stock_limit or 0):
+            p.stock = total_stock
+            items.append(p)
+
     return render(request, 'low_stock.html', {'items': items})
 
+from django.utils import timezone
+from datetime import timedelta
 
-# 📈 PROFIT
+def is_admin(user):
+    return user.is_superuser
+
+
 @user_passes_test(is_admin)
 def profit_report(request):
-    sales = Invoice.objects.aggregate(Sum('total'))['total__sum'] or 0
-    purchase = Purchase.objects.aggregate(Sum('total'))['total__sum'] or 0
 
-    sales = float(sales)
-    purchase = float(purchase)
+    filter_type = request.GET.get('filter', 'monthly')
 
-    return render(request, 'profit.html', {
-        'sales': sales,
-        'purchase': purchase,
-        'profit': sales - purchase
+    total_sales = Invoice.objects.aggregate(total=Sum('total'))['total'] or 0
+    total_purchase = Purchase.objects.aggregate(total=Sum('total'))['total'] or 0
+
+    total_sales = Decimal(str(total_sales))
+    total_purchase = Decimal(str(total_purchase))
+    total_profit = total_sales - total_purchase
+
+    # ---------------- FILTER LOGIC ----------------
+    if filter_type == "daily":
+        sales_qs = Invoice.objects.annotate(d=TruncDay('date'))
+        purchase_qs = Purchase.objects.annotate(d=TruncDay('date'))
+        fmt = "%d %b"
+
+    elif filter_type == "weekly":
+        sales_qs = Invoice.objects.annotate(d=TruncWeek('date'))
+        purchase_qs = Purchase.objects.annotate(d=TruncWeek('date'))
+        fmt = "Week %W"
+
+    elif filter_type == "yearly":
+        sales_qs = Invoice.objects.annotate(d=TruncYear('date'))
+        purchase_qs = Purchase.objects.annotate(d=TruncYear('date'))
+        fmt = "%Y"
+
+    else:
+        sales_qs = Invoice.objects.annotate(d=TruncMonth('date'))
+        purchase_qs = Purchase.objects.annotate(d=TruncMonth('date'))
+        fmt = "%b %Y"
+
+    sales_data = sales_qs.values('d').annotate(total=Sum('total')).order_by('d')
+    purchase_data = purchase_qs.values('d').annotate(total=Sum('total')).order_by('d')
+
+    purchase_map = {i['d']: Decimal(str(i['total'] or 0)) for i in purchase_data}
+
+    table_data = []
+
+    for i in sales_data:
+        date = i['d']
+
+        s = Decimal(str(i['total'] or 0))
+        p = purchase_map.get(date, Decimal('0'))
+        pr = s - p
+
+        table_data.append({
+            "period": date.strftime(fmt),
+            "sales": float(s),
+            "purchase": float(p),
+            "profit": float(pr),
+        })
+
+    return render(request, "profit.html", {
+        "total_sales": float(total_sales),
+        "total_purchase": float(total_purchase),
+        "total_profit": float(total_profit),
+
+        "table_data": table_data,
+        "selected_filter": filter_type
+
     })
-
 
 # 📊 SALES CHART
 def sales_chart(request):
