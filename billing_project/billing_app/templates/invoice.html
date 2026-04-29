@@ -30,7 +30,7 @@
     </div>
 
     <label>Branch</label>
-    <select name="branch" class="form-control mb-3">
+    <select name="branch" class="form-control mb-3" onchange="setBranch(this)">
         {% for b in branches %}
         <option value="{{ b.id }}">{{ b.name }}</option>
         {% endfor %}
@@ -49,6 +49,8 @@
                     <option value="{{ p.id }}">{{ p.name }}</option>
                     {% endfor %}
                 </select>
+
+                <small class="text-muted stock">Stock: 0</small>
             </div>
 
             <div class="col-md-2">
@@ -84,6 +86,25 @@
 <script>
 const customers = {{ customer_json|safe }};
 const products = {{ product_json|safe }};
+const stockData = {{ stock_json|safe }};
+
+
+function setBranch(sel){
+    let branchId = sel.value;
+
+    document.querySelectorAll('.item-row').forEach(row => {
+        let productSelect = row.querySelector('select[name="product[]"]');
+        let stockSpan = row.querySelector('.stock');
+
+        let pid = productSelect.value;
+
+        if (pid && stockData[branchId] && stockData[branchId][pid] !== undefined) {
+            stockSpan.innerText = "Stock: " + stockData[branchId][pid];
+        } else {
+            stockSpan.innerText = "Stock: 0";
+        }
+    });
+}
 
 // CUSTOMER
 function setCustomer(sel){
@@ -103,7 +124,15 @@ function setCustomer(sel){
 function setPrice(sel){
     let row = sel.closest('.item-row');
     let price = products[sel.value]?.price || 0;
+
     row.querySelector('.price').value = price;
+
+    // update stock based on branch
+    let branchId = document.querySelector('select[name="branch"]').value;
+    let stock = stockData?.[branchId]?.[sel.value] ?? 0;
+
+    row.querySelector('.stock').innerText = "Stock: " + stock;
+
     calcRow(row.querySelector('.qty'));
 }
 

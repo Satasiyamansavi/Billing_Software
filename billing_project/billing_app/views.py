@@ -1,17 +1,13 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login, logout
-from django.contrib.auth.decorators import login_required
-from django.db.models import Sum, F
-from django.db.models.functions import TruncDate
+from django.contrib.auth.decorators import login_required , user_passes_test
+from django.db.models import Sum, F , Q
+from django.db.models.functions import TruncDate , TruncMonth, TruncDay, TruncYear, TruncWeek
 from django.http import HttpResponse
 from io import BytesIO
-from django.contrib.auth.decorators import user_passes_test
-from .models import Dealer, DealerOrder, DealerOrderItem, Product
 from .utils.common import amount_in_words
-from .models import Invoice, InvoiceItem , Purchase
+from .models import Invoice, InvoiceItem , Purchase , Dealer, DealerOrder, DealerOrderItem, Product ,UserProfile , Customer
 from decimal import Decimal
-from django.db.models import Sum
-
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
@@ -36,7 +32,6 @@ def is_dealer_or_admin(user):
     return hasattr(user, 'userprofile') and user.userprofile.role in ['Dealer', 'Admin']
 
 # 🔐 LOGIN
-from .models import UserProfile, Dealer
 def login_view(request):
     if request.method == "POST":
         user = authenticate(
@@ -82,24 +77,14 @@ def logout_view(request):
     logout(request)
     return redirect('login')
 
-
-from django.db.models import Sum
-from django.db.models.functions import TruncMonth, TruncDay, TruncYear, TruncWeek
-from decimal import Decimal
-import json
-from .models import Customer, Product, Invoice, Purchase
-
-
 def dashboard(request):
 
     filter_type = request.GET.get('filter', 'monthly')
 
-    # COUNTS
     customer_count = Customer.objects.count()
     product_count = Product.objects.count()
     invoice_count = Invoice.objects.count()
 
-    # TOTALS (SAFE)
     total_sales = Invoice.objects.aggregate(total=Sum('total'))['total'] or 0
     total_purchase = Purchase.objects.aggregate(total=Sum('total'))['total'] or 0
 
@@ -108,7 +93,6 @@ def dashboard(request):
 
     profit_total = total_sales - total_purchase
 
-    # FILTER LOGIC
     if filter_type == "daily":
         sales_qs = Invoice.objects.annotate(d=TruncDay('date'))
         purchase_qs = Purchase.objects.annotate(d=TruncDay('date'))
@@ -132,7 +116,6 @@ def dashboard(request):
     sales_data = sales_qs.values('d').annotate(total=Sum('total')).order_by('d')
     purchase_data = purchase_qs.values('d').annotate(total=Sum('total')).order_by('d')
 
-    # MAP PURCHASE
     purchase_map = {
         item['d']: Decimal(str(item['total'] or 0))
         for item in purchase_data
@@ -150,7 +133,6 @@ def dashboard(request):
 
         label = date.strftime(fmt)
 
-        # TABLE DATA
         table_data.append({
             "period": label,
             "sales": float(s),
@@ -194,12 +176,12 @@ def customer_list(request):
         phone = request.POST.get('phone')
         address = request.POST.get('address')
 
-        if customer:  # EDIT
+        if customer:  
             customer.name = name
             customer.phone = phone
             customer.address = address
             customer.save()
-        else:  # ADD
+        else:  
             Customer.objects.create(
                 name=name,
                 phone=phone,
@@ -238,10 +220,8 @@ def product_list(request):
         data = Product.objects.all()
 
     for p in data:
-        # ✅ Branch-wise stock
         p.filtered_stocks = BranchStock.objects.filter(product=p)
 
-        # ✅ Total stock (display only)
         p.total_stock = BranchStock.objects.filter(product=p).aggregate(
             total=Sum('stock')
         )['total'] or 0
@@ -273,11 +253,10 @@ def create_invoice(request):
     branches = Branch.objects.all()
     products = Product.objects.all()
 
-    # STOCK
-    for p in products:
-        p.total_stock = BranchStock.objects.filter(product=p).aggregate(
-            total=Sum('stock')
-        )['total'] or 0
+    stock_data = {}
+    for bs in BranchStock.objects.select_related('product', 'branch'):
+        stock_data.setdefault(bs.branch_id, {})
+        stock_data[bs.branch_id][bs.product_id] = bs.stock
 
     customer_data = {
         c.id: {
@@ -315,11 +294,7 @@ def create_invoice(request):
             product = Product.objects.get(id=p_id)
             qty = int(q)
 
-            branch_stock, _ = BranchStock.objects.get_or_create(
-                product=product,
-                branch=branch,
-                defaults={'stock': 0}
-            )
+            branch_stock = BranchStock.objects.get(product=product, branch=branch)
 
             if branch_stock.stock < qty:
                 return render(request, 'invoice.html', {
@@ -329,29 +304,18 @@ def create_invoice(request):
                     'branches': branches,
                     'customer_json': json.dumps(customer_data),
                     'product_json': json.dumps(product_data),
+                    'stock_json': json.dumps(stock_data),
                 })
 
-            # ✅ Discounted Rate
             discounted_price = product.price - (product.price * discount / 100)
-
-            # ✅ Base Amount
             base_total = discounted_price * qty
-
-            # ✅ GST per item
             gst = product.gst or 18
             gst_amount = base_total * gst / 100
-
-            # ✅ FINAL AMOUNT (WITH GST)
             item_total = base_total + gst_amount
 
             subtotal += item_total
 
             items_data.append((product, qty, discounted_price, item_total))
-
-        # ❌ NO GST AGAIN (already included)
-        cgst = sgst = igst = 0
-
-        total = subtotal
 
         invoice = Invoice.objects.create(
             customer=customer,
@@ -360,8 +324,8 @@ def create_invoice(request):
             cgst=0,
             sgst=0,
             igst=0,
-            total=round(total),
-            amount_words=amount_in_words(round(total))
+            total=round(subtotal),
+            amount_words=amount_in_words(round(subtotal))
         )
 
         for product, qty, price, item_total in items_data:
@@ -369,14 +333,14 @@ def create_invoice(request):
                 invoice=invoice,
                 product=product,
                 quantity=qty,
-                price=round(price, 2),       # discounted rate
+                price=round(price, 2),
                 subtotal=round(item_total, 2),
-                hsn=product.hsn  # WITH GST
+                hsn=product.hsn
             )
 
-            branch_stock = BranchStock.objects.get(product=product, branch=branch)
-            branch_stock.stock = F('stock') - qty
-            branch_stock.save()
+            bs = BranchStock.objects.get(product=product, branch=branch)
+            bs.stock = F('stock') - qty
+            bs.save()
 
         return redirect('invoice_view', invoice.id)
 
@@ -386,6 +350,7 @@ def create_invoice(request):
         'branches': branches,
         'customer_json': json.dumps(customer_data),
         'product_json': json.dumps(product_data),
+        'stock_json': json.dumps(stock_data),   
     })
 
 # 👁️ VIEW INVOICE
@@ -398,14 +363,12 @@ def view_invoice(request, id):
     hsn_summary = defaultdict(lambda: {'taxable':0, 'cgst':0, 'sgst':0})
 
     for item in items:
-        # ✅ FIX HERE
         hsn = item.hsn or "N/A"
 
         gst = item.product.gst or 18
 
         total_with_gst = item.subtotal
 
-        # reverse GST
         taxable = total_with_gst / (1 + gst/100)
 
         gst_amount = total_with_gst - taxable
@@ -477,7 +440,6 @@ def payment(request):
 
         return redirect('payment')
 
-    # 🔥 MERGE LOGIC
     data = Payment.objects.values(
         'invoice_id',
         'invoice__id',
@@ -491,7 +453,6 @@ def payment(request):
         'customers': Customer.objects.all(),
         'invoices': Invoice.objects.all()
     })
-
 
 # 🛒 PURCHASE
 
@@ -509,7 +470,6 @@ def purchase_list(request):
         branch = purchase.branch
         qty = purchase.quantity
 
-        # ✅ ADD STOCK TO BRANCH
         stock, created = BranchStock.objects.get_or_create(
             product=product,
             branch=branch,
@@ -529,9 +489,7 @@ def purchase_list(request):
         'branches': branches
     })
 
-
 # ⚠️ LOW STOCK (UPDATED)
-from django.db.models import F, Q
 
 def low_stock(request):
     products = Product.objects.all()
@@ -555,7 +513,6 @@ from datetime import timedelta
 def is_admin(user):
     return user.is_superuser
 
-
 @user_passes_test(is_admin)
 def profit_report(request):
 
@@ -568,7 +525,6 @@ def profit_report(request):
     total_purchase = Decimal(str(total_purchase))
     total_profit = total_sales - total_purchase
 
-    # ---------------- FILTER LOGIC ----------------
     if filter_type == "daily":
         sales_qs = Invoice.objects.annotate(d=TruncDay('date'))
         purchase_qs = Purchase.objects.annotate(d=TruncDay('date'))
@@ -631,7 +587,6 @@ def sales_chart(request):
         'totals': [float(d['total']) for d in data]
     })
 
-
 # 📊 OUTSTANDING REPORT (NEW)
 @user_passes_test(is_admin)
 def outstanding_report(request):
@@ -654,7 +609,6 @@ def outstanding_report(request):
 
     return render(request, 'outstanding.html', {'data': data})
 
-
 # 📊 ITEM SALES REPORT (NEW)
 @user_passes_test(is_admin)
 def item_sales_report(request):
@@ -663,66 +617,28 @@ def item_sales_report(request):
     )
     return render(request, 'item_sales.html', {'data': data})
 
-
 # 🧾 PDF
-from django.template.loader import get_template
-from django.http import HttpResponse
-from django.shortcuts import get_object_or_404
-from xhtml2pdf import pisa
-from collections import defaultdict
-
+import pdfkit
+from django.template.loader import render_to_string
 
 def generate_invoice_pdf(request, id):
     invoice = get_object_or_404(Invoice, id=id)
     items = InvoiceItem.objects.filter(invoice=invoice).select_related('product')
 
-    # HSN SUMMARY
-    hsn_summary = defaultdict(lambda: {'taxable': 0, 'cgst': 0, 'sgst': 0})
-
-    for item in items:
-        hsn = item.hsn or "N/A"   # ✅ FIX
-    
-        gst = item.product.gst or 18
-    
-        total_with_gst = item.subtotal
-    
-        taxable = total_with_gst / (1 + gst/100)
-    
-        gst_amount = total_with_gst - taxable
-    
-        cgst = gst_amount / 2
-        sgst = gst_amount / 2
-    
-        hsn_summary[hsn]['taxable'] += taxable
-        hsn_summary[hsn]['cgst'] += cgst
-        hsn_summary[hsn]['sgst'] += sgst
-
-    hsn_data = []
-    for h, v in hsn_summary.items():
-        hsn_data.append({
-            'hsn': h,
-            'taxable': round(v['taxable'], 2),
-            'cgst': round(v['cgst'], 2),
-            'sgst': round(v['sgst'], 2),
-            'total_tax': round(v['cgst'] + v['sgst'], 2)
-        })
-
-    template = get_template('invoice_view.html')
-
-    html = template.render({
+    html = render_to_string('invoice_view.html', {
         'invoice': invoice,
         'items': items,
-        'hsn_data': hsn_data,
         'pdf': True
     })
 
-    response = HttpResponse(content_type='application/pdf')
+    config = pdfkit.configuration(
+        wkhtmltopdf=r'C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe'
+    )
+
+    pdf = pdfkit.from_string(html, False, configuration=config)
+
+    response = HttpResponse(pdf, content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="invoice_{invoice.id}.pdf"'
-
-    pisa_status = pisa.CreatePDF(html, dest=response)
-
-    if pisa_status.err:
-        return HttpResponse("PDF Error")
 
     return response
 
@@ -741,7 +657,6 @@ def sales_return(request):
             qty=qty
         )
 
-        # ✅ stock increase
         product.stock += qty
         product.save()
 
@@ -768,7 +683,6 @@ def purchase_return(request):
             qty=qty
         )
 
-        # ❌ stock decrease
         BranchStock.stock -= qty
         product.save()
 
@@ -822,9 +736,8 @@ def vehicle_mapping(request):
         'data': ProductVehicle.objects.all()
     })
 
-
 def vehicle_mapping_edit(request, id):
-    obj = ProductVehicle.objects.get(id=id)   # ✅ FIXED
+    obj = ProductVehicle.objects.get(id=id)   
 
     if request.method == "POST":
         obj.product_id = request.POST['product']
@@ -838,9 +751,8 @@ def vehicle_mapping_edit(request, id):
         'vehicles': VehicleModel.objects.all()
     })
 
-
 def vehicle_mapping_delete(request, id):
-    obj = ProductVehicle.objects.get(id=id)   # ✅ FIXED
+    obj = ProductVehicle.objects.get(id=id)   
     obj.delete()
     return redirect('vehicle_mapping')
 
@@ -909,7 +821,6 @@ def stock_transfer(request):
         to_branch = Branch.objects.get(id=request.POST['to_branch'])
         qty = int(request.POST['qty'])
 
-        # FROM stock
         from_stock = BranchStock.objects.filter(
             product=product,
             branch=from_branch
@@ -921,11 +832,9 @@ def stock_transfer(request):
         if from_stock.stock < qty:
             return HttpResponse("Not enough stock in FROM branch")
 
-        # ✅ reduce from branch
         from_stock.stock -= qty
         from_stock.save()
 
-        # ✅ add to branch
         to_stock, created = BranchStock.objects.get_or_create(
             product=product,
             branch=to_branch,
@@ -935,7 +844,6 @@ def stock_transfer(request):
         to_stock.stock += qty
         to_stock.save()
 
-        # ✅ SAVE HISTORY
         StockTransfer.objects.create(
             product=product,
             from_branch=from_branch,
@@ -943,7 +851,6 @@ def stock_transfer(request):
             quantity=qty
         )
 
-        # 🔥🔥 IMPORTANT FIX: UPDATE TOTAL PRODUCT STOCK
         total_stock = BranchStock.objects.filter(product=product).aggregate(
             total=Sum('stock')
         )['total'] or 0
@@ -958,14 +865,8 @@ def stock_transfer(request):
         'branches': branches,
         'branch_stock': branch_stock
     })
-   
-from django.contrib.auth.decorators import login_required
-from .models import Dealer, DealerOrder, DealerOrderItem, Product
-
 
 # 🧑‍💼 DEALER DASHBOARD
-from django.http import HttpResponse
-
 @user_passes_test(is_dealer_or_admin)
 def dealer_dashboard(request):
 
@@ -973,10 +874,11 @@ def dealer_dashboard(request):
         dealer = Dealer.objects.filter(user=request.user).first()
         products = Product.objects.filter(stock__gt=0)
 
-    else:  # Admin
+    else:  
         products = Product.objects.all()
 
     return render(request, 'dealer_dashboard.html', {'products': products})
+
 # 🛒 PLACE ORDER
 @login_required
 def dealer_place_order(request):
@@ -989,11 +891,10 @@ def dealer_place_order(request):
     if request.method == "POST":
 
         order = DealerOrder.objects.create(dealer=dealer)
-        has_item = False   # 🔥 check if any product selected
+        has_item = False   
 
         for key, value in request.POST.items():
 
-            # ✅ skip empty values
             if not value or value == "":
                 continue
 
@@ -1009,7 +910,6 @@ def dealer_place_order(request):
                 product_id = key.split('_')[1]
                 product = Product.objects.get(id=product_id)
 
-                # ✅ stock check
                 if qty > product.stock:
                     return HttpResponse(f"Not enough stock for {product.name}")
 
@@ -1021,7 +921,6 @@ def dealer_place_order(request):
 
                 has_item = True
 
-        # ❌ if no product selected → delete empty order
         if not has_item:
             order.delete()
             return HttpResponse("Please select at least one product")
@@ -1042,7 +941,6 @@ def dealer_orders(request):
 def delete_dealer_order(request, id):
     order = get_object_or_404(DealerOrder, id=id)
 
-    # 🔒 security: only owner delete kari shake
     if order.dealer.user != request.user:
         return HttpResponse("Unauthorized", status=403)
 
@@ -1055,12 +953,10 @@ def send_whatsapp_invoice(request, id):
 
     customer = invoice.customer
 
-    # 📱 Phone format (India)
     phone = customer.phone
     if not phone.startswith('91'):
         phone = '91' + phone
 
-    # 🧾 Message build
     message = f"🧾 *Invoice #{invoice.id}*\n\n"
     message += f"Customer: {customer.name}\n"
     message += f"Date: {invoice.date.strftime('%d-%m-%Y')}\n\n"
@@ -1076,7 +972,6 @@ def send_whatsapp_invoice(request, id):
     message += f"IGST: ₹{invoice.igst}\n"
     message += f"\n💰 *Total: ₹{invoice.total}*"
 
-    # 🔗 Encode URL
     encoded_message = urllib.parse.quote(message)
 
     whatsapp_url = f"https://wa.me/{phone}?text={encoded_message}"
@@ -1094,9 +989,8 @@ def generate_einvoice(request, id):
     return render(request, 'einvoice.html', {
         'data': data,
         'irn': irn,
-        'invoice': invoice   # ✅ MUST
+        'invoice': invoice   
     })
-
 
 # 🚚 E-WAY BILL
 
@@ -1116,13 +1010,13 @@ def generate_ewaybill(request, id):
 
     return render(request, 'ewaybill.html', {
         'data': data,
-        'invoice': invoice   # ✅ ADD THIS
+        'invoice': invoice   
     })
 
 # 👨‍💼 ADD SALESMAN
 def salesman_list(request):
     data = Salesman.objects.all()
-    users = User.objects.exclude(salesman__isnull=False)  # already assigned users remove
+    users = User.objects.exclude(salesman__isnull=False)  
 
     if request.method == "POST":
         user_id = request.POST.get('user')
@@ -1140,7 +1034,6 @@ def salesman_list(request):
         'data': data,
         'users': users
     })
-
 
 # 👥 ASSIGN CUSTOMER
 def assign_customer(request):
@@ -1161,7 +1054,6 @@ def assign_customer(request):
         'salesmen': Salesman.objects.all(),
         'data': CustomerAssign.objects.select_related('customer', 'salesman')
     })
-
 
 # 📍 ADD VISIT
 def add_visit(request):
@@ -1185,7 +1077,6 @@ def add_visit(request):
         'data': Visit.objects.select_related('salesman', 'customer').order_by('-date')
     })
 
-
 # 📊 REPORT
 def salesman_report(request):
     data = Visit.objects.values(
@@ -1194,11 +1085,8 @@ def salesman_report(request):
 
     return render(request, 'salesman_report.html', {'data': data})
 
-from django.shortcuts import render
-from .models import InvoiceItem, Product
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
-
 
 def get_predictions():
     items = InvoiceItem.objects.select_related('invoice', 'product')
@@ -1235,7 +1123,6 @@ def get_predictions():
 
         product = Product.objects.get(id=product_id)
 
-        # ✅ HANDLE SMALL DATA (VERY IMPORTANT FIX)
         if len(grouped) == 1:
             prediction = int(grouped['sales'].iloc[0])
         else:
@@ -1278,7 +1165,6 @@ def demand_prediction(request):
     actual_data = []
     predicted_data = []
 
-    # 📊 Prepare graph data
     for p in predictions:
         labels.append(p['name'])
         actual_data.append(p['stock'])
