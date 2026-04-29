@@ -4,35 +4,26 @@
 <title>Invoice</title>
 
 <style>
-
 body {
     font-family: Arial;
-    font-size: 12px;
-    background: #eee;
-}
-
-.page {
-    width: 210mm;
-    min-height: 297mm;
-    margin: 20px auto;
-    padding: 10mm;
-    background: white;
-    box-shadow: 0 0 10px rgba(0,0,0,0.2);
+    font-size: 10px;
+    width: 800px;
+    margin: auto;
 }
 
 table {
     width: 100%;
     border-collapse: collapse;
+    table-layout: fixed;
 }
 
 td, th {
     border: 1px solid black;
-    padding: 5px;
-    font-size: 10px;
+    padding: 3px;
 }
 
-tr {
-    page-break-inside: avoid;
+.no-border td {
+    border: none;
 }
 
 .center { text-align: center; }
@@ -40,38 +31,14 @@ tr {
 
 @page {
     size: A4;
-    margin: 10mm;
+    margin: 5mm;
 }
-
-/* FIXED ROW HEIGHT
-.row {
-    height: 22px;
-} */
-
-.btns { 
-    margin-top: 20px; text-align: center; 
-} 
-.btn { 
-    padding: 6px 10px; 
-    margin: 2px; 
-    text-decoration: none; 
-    color: white; 
-    background: black; 
-    display: inline-block; 
-    font-size: 12px; 
-}
-    
-@media print { 
-    .btns { display: none; } 
-}
-
 </style>
 </head>
 
 <body>
 
-<div class="page">
-
+<!-- HEADER -->
 <table>
 <tr>
 <td colspan="6" class="center">
@@ -87,10 +54,13 @@ GSTIN: 24XXXXX1234X1Z5
 </tr>
 </table>
 
+<!-- PARTY + DETAILS -->
 <table>
+
 <tr>
 
-<td rowspan="5">
+<td width="50%" rowspan="7">
+
 <b>{{ invoice.customer.name }}</b><br>
 {{ invoice.customer.address }}<br><br>
 
@@ -99,6 +69,7 @@ GSTIN: 24XXXXX1234X1Z5
 <b>Place of Supply :</b> {{ invoice.customer.state }}<br>
 <b>GSTIN :</b> {{ invoice.customer.gstin|default:"-" }}<br>
 <b>PAN :</b> {{ invoice.customer.pan|default:"-" }}
+
 </td>
 
 <td>Invoice No</td>
@@ -108,94 +79,139 @@ GSTIN: 24XXXXX1234X1Z5
 
 </tr>
 
-<tr><td>Challan No</td><td>-</td><td>Date</td><td>-</td></tr>
-<tr><td>P.O No</td><td>-</td><td>Date</td><td>-</td></tr>
-<tr><td>Transport</td><td>-</td><td>L.R No</td><td>-</td></tr>
-<tr><td>Total Package</td><td>1</td><td>Payment Days</td><td>0</td></tr>
+<tr>
+<td>Challan No</td>
+<td>-</td>
+<td>Date</td>
+<td>-</td>
+</tr>
+
+<tr>
+<td>P.O No</td>
+<td>-</td>
+<td>Date</td>
+<td>-</td>
+</tr>
+
+<tr>
+<td>Transport</td>
+<td>-</td>
+<td>L.R No</td>
+<td>-</td>
+</tr>
+
+<tr>
+<td>Total Package</td>
+<td>1</td>
+<td>Payment Days</td>
+<td>0</td>
+</tr>
 
 </table>
 
-<table width="100%" border="1" cellspacing="0" cellpadding="2">
+<!-- PRODUCT TABLE -->
+<table>
 
 <tr>
-<th style="width:30px;">No</th>
-<th style="width:150px;">Product Name</th>
-<th style="width:60px;">HSN</th>
-<th style="width:50px;">Qty</th>
-<th style="width:70px;">Rate</th>
-<th style="width:60px;">GST%</th>
-<th style="width:100px;">Amount</th>
+<th width="5%">No</th>
+<th width="35%">Product Name</th>
+<th width="10%">HSN</th>
+<th width="8%">Qty</th>
+<th width="8%">Unit</th>
+<th width="10%">Rate</th>
+<th width="8%">GST%</th>
+<th width="16%">Amount</th>
 </tr>
 
 {% for item in items %}
-<tr class="row">
+<tr>
 <td>{{ forloop.counter }}</td>
 <td>{{ item.product.name }}</td>
 <td>{{ item.product.hsn|default:"-" }}</td>
 <td class="center">{{ item.quantity }}</td>
-<td class="right">{{ item.price }}</td>
+<td class="center">PCS</td>
+<td class="right">{{ item.product.price }}</td>
 <td class="center">{{ item.product.gst }}%</td>
 <td class="right">{{ item.subtotal }}</td>
 </tr>
 {% endfor %}
 
-{% for i in "123456789012345" %}
-{% if forloop.counter > items|length %}
-<tr class="row">
-<td>&nbsp;</td>
-<td></td>
-<td></td>
-<td></td>
-<td></td>
-<td></td>
-<td></td>
-</tr>
-{% endif %}
-{% endfor %}
-
 <tr>
-<td colspan="5"></td>
+<td colspan="6"></td>
 <td class="right"><b>Sub Total</b></td>
 <td class="right"><b>{{ invoice.subtotal }}</b></td>
 </tr>
 
 </table>
 
+<!-- FOOTER -->
 <table>
+
 <tr>
 
-<td>
+<td width="60%">
+
 Bank Name : BANK OF BARODA<br>
 A/c No : 03260200001308<br>
-IFSC Code : BARB0XXXXX<br><br>
+IFSC Code : BARB0XXXXX
+
+<br><br>
 
 Amount : {{ invoice.amount_words }} Only
+
+<br><br>
+
+
+
 </td>
 
-<td>
-Taxable Amount : {{ invoice.subtotal }}<br>
-CGST 9% : {{ invoice.cgst }}<br>
-SGST 9% : {{ invoice.sgst }}<br>
-Round Off : 0<br>
-<b>Grand Total : {{ invoice.total }}</b>
+<td width="40%">
+
+<table>
+<tr>
+<td>Taxable Amount</td>
+<td class="right">{{ invoice.subtotal }}</td>
+</tr>
+
+<tr>
+<td>CGST 9%</td>
+<td class="right">{{ invoice.cgst }}</td>
+</tr>
+
+<tr>
+<td>SGST 9%</td>
+<td class="right">{{ invoice.sgst }}</td>
+</tr>
+
+<tr>
+<td>Round Off</td>
+<td class="right">0</td>
+</tr>
+
+<tr>
+<td><b>Grand Total</b></td>
+<td class="right"><b>{{ invoice.total }}</b></td>
+</tr>
+</table>
+ 
 </td>
 
 </tr>
-</table>
 
+</table>
 <table>
 <tr>
 
-<td style="border-right:none;">
+<td width="85%" style="border-right:none;">
 <b>Terms & Conditions</b><br>
 Goods once sold will not be taken back.<br>
 Interest @18% p.a. after due date.<br>
 Subject to Ahmedabad jurisdiction.
 </td>
 
-<td style="border-left:none; text-align:right;">
-    For RADHE FURNITURE<br><br><br>
-    <b>Authorised Signatory</b>
+<td width="15%" style="border-left:none;">
+For RADHE FURNITURE<br><br><br>
+<b>Authorised Signatory</b>
 </td>
 
 </tr>
@@ -211,7 +227,9 @@ Subject to Ahmedabad jurisdiction.
     <a href="{% url 'invoice_list' %}" class="btn back">Back</a>
 </div>
 {% endif %}
-</div>
 
+.btns { margin-top: 20px; text-align: center; } 
+    .btn { padding: 6px 10px; margin: 2px; text-decoration: none; color: white; background: black; display: inline-block; font-size: 12px; } /* 🔥 HIDE BUTTONS IN PRINT/PDF */ 
+    @media print { .btns { display: none; } }
 </body>
 </html>
