@@ -27,6 +27,11 @@ class Brand(models.Model):
     def __str__(self):
         return self.name
 
+class Category(models.Model):
+    name = models.CharField(max_length=100)
+
+    def __str__(self):
+        return self.name
 
 # PRODUCT (Inventory Control)
 class Product(models.Model):
@@ -38,9 +43,30 @@ class Product(models.Model):
     low_stock_limit = models.IntegerField(default=5)
     hsn = models.CharField(max_length=20, blank=True, null=True)
     gst = models.FloatField(default=18)
-
+    category = models.ForeignKey(Category, on_delete=models.CASCADE, null=True, blank=True)
+    parent = models.ForeignKey('self',on_delete=models.CASCADE,null=True,blank=True,related_name='children')
     def __str__(self):
         return self.name
+    
+class Variant(models.Model):
+    COLUMN_CHOICES = [
+        ("MAIN", "Main"),
+        ("2P", "2P"),
+        ("AUXA", "Aux-A"),
+        ("AUXB", "Aux-B"),
+        ("3", "3"),
+        ("4", "4"),
+        ("5", "5"),
+        ("6", "6"),
+    ]
+
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='variants')
+    size = models.CharField(max_length=50, blank=True, null=True)
+    column = models.CharField(max_length=10,choices=COLUMN_CHOICES,null=True,blank=True)
+    price = models.FloatField()
+
+    def __str__(self):
+        return f"{self.product.name} - {self.column}"
 
 class Branch(models.Model):
     name = models.CharField(max_length=100)
@@ -126,7 +152,7 @@ class InvoiceItem(models.Model):
     subtotal = models.FloatField()
     price = models.FloatField(null=True, blank=True)
     hsn = models.CharField(max_length=20, blank=True, null=True)
-
+    variant = models.ForeignKey(Variant, on_delete=models.CASCADE, null=True, blank=True)
 
 
 # PAYMENT

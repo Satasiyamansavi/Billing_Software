@@ -11,7 +11,7 @@
     {% csrf_token %}
 
     <label>Customer</label>
-    <select name="customer" class="form-control mb-2" onchange="setCustomer(this)">
+    <select name="customer" class="form-control mb-2" onchange="setCustomer(this)" required>
         <option value="">Select</option>
         {% for c in customers %}
         <option value="{{ c.id }}">{{ c.name }}</option>
@@ -43,13 +43,21 @@
         <div class="row g-2 mb-2 item-row">
 
             <div class="col-md-3">
-                <select name="product[]" class="form-control" onchange="setPrice(this)">
+                <select name="product[]" class="form-control" onchange="loadVariants(this)">
                     <option value="">Product</option>
                     {% for p in products %}
-                    <option value="{{ p.id }}">{{ p.name }}</option>
+                        {% if p.parent %}
+                            <option value="{{ p.id }}">
+                                {{ p.parent.name }} → {{ p.name }}
+                            </option>
+                        {% endif %}
                     {% endfor %}
                 </select>
-
+            
+                <select name="variant[]" class="form-control mt-1" onchange="setPrice(this)">
+                    <option value="">Select Size</option>
+                </select>
+            
                 <small class="text-muted stock">Stock: 0</small>
             </div>
 
@@ -87,19 +95,20 @@
 const customers = {{ customer_json|safe }};
 const products = {{ product_json|safe }};
 const stockData = {{ stock_json|safe }};
+const variants = {{ variant_json|safe }};
 
 
 function setBranch(sel){
     let branchId = sel.value;
 
     document.querySelectorAll('.item-row').forEach(row => {
-        let productSelect = row.querySelector('select[name="product[]"]');
+        let variantSelect = row.querySelector('select[name="variant[]"]');
         let stockSpan = row.querySelector('.stock');
 
-        let pid = productSelect.value;
+        let vid = variantSelect.value;
 
-        if (pid && stockData[branchId] && stockData[branchId][pid] !== undefined) {
-            stockSpan.innerText = "Stock: " + stockData[branchId][pid];
+        if (vid && stockData[branchId] && stockData[branchId][vid] !== undefined) {
+            stockSpan.innerText = "Stock: " + stockData[branchId][vid];
         } else {
             stockSpan.innerText = "Stock: 0";
         }
@@ -108,29 +117,56 @@ function setBranch(sel){
 
 // CUSTOMER
 function setCustomer(sel){
-    let c = customers[sel.value] || {};
+    let id = sel.value;
 
-    // Show details
+    if(!id || !customers[id]){
+        document.getElementById('cust_state').innerText = '-';
+        document.getElementById('cust_phone').innerText = '-';
+        document.getElementById('cust_address').innerText = '-';
+        document.getElementById('cust_discount').value = 0;
+        return;
+    }
+
+    let c = customers[id];
+
     document.getElementById('cust_state').innerText = c.state || '-';
     document.getElementById('cust_phone').innerText = c.phone || '-';
     document.getElementById('cust_address').innerText = c.address || '-';
 
-    // Set default discount (editable)
     document.getElementById('cust_discount').value = c.discount || 0;
 
     calcTotal();
 }
-// PRODUCT PRICE
+
+// LOAD VARIANTS
+function loadVariants(sel){
+    let productId = sel.value;
+    let row = sel.closest('.item-row');
+    let variantSelect = row.querySelector('select[name="variant[]"]');
+
+    variantSelect.innerHTML = '<option value="">Select Size</option>';
+
+    if(variants[productId]){
+        variants[productId].forEach(v => {
+            variantSelect.innerHTML += `<option value="${v.id}" data-price="${v.price}">
+                ${v.size}
+            </option>`;
+        });
+    }
+}
+
+// SET PRICE FROM VARIANT
 function setPrice(sel){
     let row = sel.closest('.item-row');
-    let price = products[sel.value]?.price || 0;
+    let price = sel.selectedOptions[0]?.dataset.price || 0;
 
     row.querySelector('.price').value = price;
 
-    // update stock based on branch
-    let branchId = document.querySelector('select[name="branch"]').value;
-    let stock = stockData?.[branchId]?.[sel.value] ?? 0;
+    // stock
+    let branchId = document.querySelector('[name="branch"]').value;
+    let variantId = sel.value;
 
+    let stock = stockData?.[branchId]?.[variantId] ?? 0;
     row.querySelector('.stock').innerText = "Stock: " + stock;
 
     calcRow(row.querySelector('.qty'));

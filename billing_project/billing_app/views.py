@@ -6,7 +6,7 @@ from django.db.models.functions import TruncDate , TruncMonth, TruncDay, TruncYe
 from django.http import HttpResponse
 from io import BytesIO
 from .utils.common import amount_in_words
-from .models import Invoice, InvoiceItem , Purchase , Dealer, DealerOrder, DealerOrderItem, Product ,UserProfile , Customer
+from .models import Invoice, InvoiceItem , Purchase , Dealer, DealerOrder, DealerOrderItem, Product ,UserProfile , Customer , Variant , BranchStock ,Category
 from decimal import Decimal
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
 from reportlab.lib import colors
@@ -17,7 +17,7 @@ import json
 from .models import *
 from .forms import *
 import urllib.parse
-
+from .forms import ProductForm
 
 def is_admin(user):
     return hasattr(user, 'userprofile') and user.userprofile.role == 'Admin'
@@ -214,38 +214,100 @@ def delete_customer(request, id):
 def product_list(request):
     query = request.GET.get('q')
 
+    # 🔍 SEARCH
     if query:
-        data = Product.objects.filter(name__icontains=query)
+        all_products = Product.objects.filter(name__icontains=query)
     else:
-        data = Product.objects.all()
+        all_products = Product.objects.all()
 
-    for p in data:
-        p.filtered_stocks = BranchStock.objects.filter(product=p)
+    branches = Branch.objects.all()
 
-        p.total_stock = BranchStock.objects.filter(product=p).aggregate(
-            total=Sum('stock')
-        )['total'] or 0
+    # 🔥 COLUMN STRUCTURE
+    columns = ['MAIN', '2P', 'AUXA', 'AUXB', '3', '4', '5', '6']
 
+    # 🔥 MAIN PRODUCTS ONLY
+    main_products = all_products.filter(parent__isnull=True)
+
+    final_data = []
+
+    for p in main_products:
+
+        # 🔹 VARIANTS
+        p.variant_list = p.variants.all()
+
+        # 🔹 BRANCH STOCK
+        p.branch_stock = {}
+        for b in branches:
+            stock = BranchStock.objects.filter(product=p, branch=b).aggregate(
+                total=Sum('stock')
+            )['total'] or 0
+
+            p.branch_stock[b.id] = stock
+
+        p.total_stock = sum(p.branch_stock.values())
+
+        # 🔥 SUB PRODUCTS
+        subs = Product.objects.filter(parent=p)
+
+        for s in subs:
+            s.variant_list = s.variants.all()
+
+            s.branch_stock = {}
+            for b in branches:
+                stock = BranchStock.objects.filter(product=s, branch=b).aggregate(
+                    total=Sum('stock')
+                )['total'] or 0
+
+                s.branch_stock[b.id] = stock
+
+            s.total_stock = sum(s.branch_stock.values())
+
+        final_data.append({
+            "product": p,
+            "subs": subs
+        })
+
+    # 🔥 EDIT MODE
     edit_id = request.GET.get('edit')
     product = Product.objects.filter(id=edit_id).first()
 
     form = ProductForm(request.POST or None, instance=product)
 
-    if form.is_valid():
-        form.save()
+    # 🔥 SAVE PRODUCT + VARIANTS
+    if request.method == "POST" and form.is_valid():
+        product = form.save()
+
+        sizes = request.POST.getlist('size[]')
+        prices = request.POST.getlist('price[]')
+
+        # OLD DELETE
+        product.variants.all().delete()
+
+        # SAVE NEW
+        for i, (s, p_val) in enumerate(zip(sizes, prices)):
+            if s and p_val:
+                Variant.objects.create(
+                    product=product,
+                    size=s,
+                    price=p_val,
+                    column=s if i < len(columns) else 'MAIN'
+                )
+
         return redirect('product')
 
     return render(request, 'product.html', {
-        'data': data,
+        'data': final_data,
         'form': form,
-        'product_to_edit': product
+        'product_to_edit': product,
+        'columns': columns,
+        'branches': branches
     })
+
 
 def delete_product(request, id):
     Product.objects.filter(id=id).delete()
     return redirect('product')
-
-
+    
 # 🧾 INVOICE (GST UPDATED)
 
 def create_invoice(request):
@@ -253,33 +315,46 @@ def create_invoice(request):
     branches = Branch.objects.all()
     products = Product.objects.all()
 
-    stock_data = {}
-    for bs in BranchStock.objects.select_related('product', 'branch'):
-        stock_data.setdefault(bs.branch_id, {})
-        stock_data[bs.branch_id][bs.product_id] = bs.stock
-
-    customer_data = {
-        c.id: {
-            "name": c.name,
-            "discount": getattr(c, 'discount', 0),
-            "state": c.state,
-            "phone": getattr(c, 'phone', ''),
-            "address": c.address,
-        } for c in customers
+    # 🔥 PRODUCT JSON (MISSING BEFORE)
+    product_data = {
+        str(p.id): {
+            "name": p.name,
+        } for p in products
     }
 
-    product_data = {
-        p.id: {
-            "name": p.name,
-            "price": float(p.price)
-        } for p in products
+    # 🔥 VARIANT DATA
+    variant_data = {}
+    for v in Variant.objects.select_related('product'):
+        variant_data.setdefault(str(v.product_id), [])
+        variant_data[str(v.product_id)].append({
+            "id": str(v.id),
+            "size": v.size,
+            "price": float(v.price)
+        })
+
+    # 🔥 STOCK DATA (variant-wise)
+    stock_data = {}
+    for bs in BranchStock.objects.select_related('product', 'branch'):
+        for v in bs.product.variants.all():
+            stock_data.setdefault(str(bs.branch_id), {})
+            stock_data[str(bs.branch_id)][str(v.id)] = bs.stock
+
+    # 🔥 CUSTOMER DATA
+    customer_data = {
+        str(c.id): {
+            "name": c.name,
+            "discount": float(getattr(c, 'discount', 0)),
+            "state": c.state or '',
+            "phone": getattr(c, 'phone', '') or '',
+            "address": c.address or '',
+        } for c in customers
     }
 
     if request.method == "POST":
         customer = Customer.objects.get(id=request.POST.get('customer'))
         branch = Branch.objects.get(id=request.POST.get('branch'))
 
-        product_ids = request.POST.getlist('product[]')
+        variant_ids = request.POST.getlist('variant[]')
         qtys = request.POST.getlist('qty[]')
 
         discount = float(request.POST.get('cust_discount', 0))
@@ -287,27 +362,31 @@ def create_invoice(request):
         subtotal = 0
         items_data = []
 
-        for p_id, q in zip(product_ids, qtys):
-            if not q:
+        for v_id, q in zip(variant_ids, qtys):
+            if not v_id or not q:
                 continue
 
-            product = Product.objects.get(id=p_id)
+            variant = Variant.objects.get(id=v_id)
+            product = variant.product
             qty = int(q)
 
             branch_stock = BranchStock.objects.get(product=product, branch=branch)
 
             if branch_stock.stock < qty:
                 return render(request, 'invoice.html', {
-                    'error': f"Not enough stock in {branch.name} for {product.name}",
+                    'error': f"Not enough stock for {product.name} ({variant.size})",
                     'customers': customers,
                     'products': products,
                     'branches': branches,
                     'customer_json': json.dumps(customer_data),
                     'product_json': json.dumps(product_data),
+                    'variant_json': json.dumps(variant_data),
                     'stock_json': json.dumps(stock_data),
                 })
 
-            discounted_price = product.price - (product.price * discount / 100)
+            price = float(variant.price)
+            discounted_price = price - (price * discount / 100)
+
             base_total = discounted_price * qty
             gst = product.gst or 18
             gst_amount = base_total * gst / 100
@@ -315,7 +394,7 @@ def create_invoice(request):
 
             subtotal += item_total
 
-            items_data.append((product, qty, discounted_price, item_total))
+            items_data.append((product, variant, qty, discounted_price, item_total))
 
         invoice = Invoice.objects.create(
             customer=customer,
@@ -328,10 +407,11 @@ def create_invoice(request):
             amount_words=amount_in_words(round(subtotal))
         )
 
-        for product, qty, price, item_total in items_data:
+        for product, variant, qty, price, item_total in items_data:
             InvoiceItem.objects.create(
                 invoice=invoice,
                 product=product,
+                variant=variant,
                 quantity=qty,
                 price=round(price, 2),
                 subtotal=round(item_total, 2),
@@ -350,7 +430,8 @@ def create_invoice(request):
         'branches': branches,
         'customer_json': json.dumps(customer_data),
         'product_json': json.dumps(product_data),
-        'stock_json': json.dumps(stock_data),   
+        'variant_json': json.dumps(variant_data),
+        'stock_json': json.dumps(stock_data),
     })
 
 # 👁️ VIEW INVOICE
