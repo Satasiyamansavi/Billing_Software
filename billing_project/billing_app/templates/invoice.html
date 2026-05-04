@@ -44,12 +44,21 @@
 
             <div class="col-md-3">
                 <select name="product[]" class="form-control" onchange="loadVariants(this)">
-                    <option value="">Product</option>
-                    {% for p in products %}
-                        {% if p.parent %}
-                            <option value="{{ p.id }}">
-                                {{ p.parent.name }} → {{ p.name }}
-                            </option>
+                    <option value="">Select Product</option>
+                
+                    {% for parent in products %}
+                        {% if not parent.parent %}
+                            <optgroup label="{{ parent.name }}">
+                                
+                                {% for p in products %}
+                                    {% if p.parent and p.parent.id == parent.id %}
+                                        <option value="{{ p.id }}">
+                                            {{ p.name }}
+                                        </option>
+                                    {% endif %}
+                                {% endfor %}
+                
+                            </optgroup>
                         {% endif %}
                     {% endfor %}
                 </select>

@@ -53,11 +53,26 @@
                         </td>
 
                         <td class="small text-muted">
+    
+                            <!-- Show first 2 products -->
                             {% for item in d.invoice.invoiceitem_set.all|slice:":2" %}
                                 {{ item.product.name }} × {{ item.quantity }}<br>
                             {% endfor %}
+                        
+                            <!-- Hidden remaining products -->
+                            <span id="more-{{ d.invoice.id }}" style="display:none;">
+                                {% for item in d.invoice.invoiceitem_set.all|slice:"2:" %}
+                                    {{ item.product.name }} × {{ item.quantity }}<br>
+                                {% endfor %}
+                            </span>
+                        
+                            <!-- Show more button -->
                             {% if d.invoice.invoiceitem_set.count > 2 %}
-                                <span class="text-muted">+ more</span>
+                                <a href="javascript:void(0);" 
+                                   onclick="showMore({{ d.invoice.id }})" 
+                                   id="btn-{{ d.invoice.id }}">
+                                   + more
+                                </a>
                             {% endif %}
                         </td>
 
@@ -114,6 +129,12 @@ document.getElementById("searchInput").addEventListener("keyup", function () {
         row.style.display = name.includes(value) ? "" : "none";
     });
 });
+
+function showMore(id) {
+    document.getElementById("more-" + id).style.display = "inline";
+    document.getElementById("btn-" + id).style.display = "none";
+}
+
 </script>
 
 {% endblock %} 

@@ -18,6 +18,9 @@ urlpatterns = [
     path('invoice_view/<int:id>/', views.view_invoice, name='invoice_view'),
     path('invoice-list/', views.invoice_list, name='invoice_list'),
     path('purchase/', views.purchase_list, name='purchase'),
+    path('purchase/edit/<int:id>/', views.purchase_edit, name='purchase_edit'),
+    path('purchase/delete/<int:id>/', views.purchase_delete, name='purchase_delete'),
+
     path('low-stock/', views.low_stock, name='low_stock'),
     path('profit/', views.profit_report, name='profit'),
     path('sales-chart/', views.sales_chart, name='sales_chart'),
@@ -39,6 +42,7 @@ urlpatterns = [
     path('branch/edit/<int:id>/', views.branch_edit, name='branch_edit'),
     path('branch/delete/<int:id>/', views.branch_delete, name='branch_delete'),
     path('stock-transfer/', views.stock_transfer, name='stock_transfer'),
+    path('stock/delete/<int:id>/', views.delete_stock, name='delete_stock'),
     path('dealer/dashboard/', views.dealer_dashboard, name='dealer_dashboard'),
     path('dealer/place-order/', views.dealer_place_order, name='dealer_place_order'),
     path('dealer/orders/', views.dealer_orders, name='dealer_orders'),

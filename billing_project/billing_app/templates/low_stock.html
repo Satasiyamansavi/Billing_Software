@@ -7,9 +7,7 @@
     <thead class="table-dark">
         <tr>
             <th>Product</th>
-            <th>Part Number</th>
             <th>Brand</th>
-            <th>Rack</th>
             <th>Stock</th>
             <th>Limit</th>
         </tr>
@@ -18,11 +16,9 @@
     <tbody>
     {% for item in items %}
     <tr>
-        <td>{{ item.name }}</td>
-        <td>{{ item.part_number }}</td>
+        <td>{{ item.parent.name }}<br><small class="text-muted">↳ {{ item.name }}</small></td>
         <td>{{ item.brand.name }}</td>
-        <td>{{ item.rack_location }}</td>
-        <td style="color:red; font-weight:bold;">{{ item.stock }}</td>
+        <td class="{% if item.stock < item.low_stock_limit %}text-danger fw-bold{% endif %}">{{ item.stock }}</td>
         <td>{{ item.low_stock_limit }}</td>
     </tr>
     {% empty %}

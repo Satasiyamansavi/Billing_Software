@@ -20,17 +20,18 @@
 
         <form method="post">
             {% csrf_token %}
+
             {{ form.as_p }}
 
             <hr>
-            <h6>Variants</h6>
+            <h6>Variants (Optional)</h6>
 
             <div id="variants">
 
                 {% if product_to_edit %}
                     {% for v in product_to_edit.variants.all %}
                     <div class="row mb-2">
-            
+
                         <div class="col">
                             <select name="size[]" class="form-control">
                                 <option value="">Select Size</option>
@@ -41,17 +42,17 @@
                                 {% endfor %}
                             </select>
                         </div>
-            
+
                         <div class="col">
                             <input type="number" name="price[]" class="form-control" value="{{ v.price }}">
                         </div>
-            
+
                     </div>
                     {% endfor %}
-            
+
                 {% else %}
                     <div class="row mb-2">
-            
+
                         <div class="col">
                             <select name="size[]" class="form-control">
                                 <option value="">Select Size</option>
@@ -60,17 +61,17 @@
                                 {% endfor %}
                             </select>
                         </div>
-            
+
                         <div class="col">
                             <input type="number" name="price[]" class="form-control" placeholder="Price">
                         </div>
-            
+
                     </div>
                 {% endif %}
 
             </div>
 
-            <button type="button" onclick="addRow()" class="btn btn-success mb-2">+ Add</button>
+            <button type="button" onclick="addRow()" class="btn btn-success mb-2">+ Add Variant</button>
 
             <button class="btn btn-primary w-100">
                 {% if product_to_edit %}Update{% else %}Add{% endif %}
@@ -80,22 +81,55 @@
 </div>
 
 <!-- TABLE -->
-<div class="card shadow">
-    <div class="card-body p-0">
+<style>
+.table-sm td, .table-sm th {
+    padding: 6px !important;
+    font-size: 13px;
+    vertical-align: middle;
+}
 
-        <table class="table table-bordered text-center">
+.compact-text {
+    font-size: 12px;
+    margin: 0;
+}
+
+.variant-cell {
+    min-width: 70px;
+    white-space: nowrap;
+}
+
+.product-header {
+    background: #f1f3f5;
+    font-size: 14px;
+}
+
+.stock-box {
+    font-size: 12px;
+    line-height: 1.3;
+}
+
+.table tbody tr:hover {
+    background: #fafafa;
+}
+</style>
+
+
+<div class="card shadow">
+    <div class="card-body p-2">
+
+        <div class="table-responsive">
+        <table class="table table-bordered table-sm text-center align-middle">
 
             <thead class="table-dark">
                 <tr>
-                    <th>Product</th>
+                    <th style="width:160px;">Product</th>
 
                     {% for col in columns %}
-                        <th>{{ col }}</th>
+                        <th class="variant-cell">{{ col }}</th>
                     {% endfor %}
 
-                    <th>Branch Stock</th>
-
-                    <th>Action</th>
+                    <th style="width:180px;">Stock</th>
+                    <th style="width:90px;">Action</th>
                 </tr>
             </thead>
 
@@ -103,19 +137,25 @@
 
             {% for item in data %}
 
-                <!-- HEADER -->
-                <tr style="background:#eee; font-weight:bold;">
-                    <td colspan="100%">{{ item.product.name }}</td>
+                <!-- MAIN PRODUCT -->
+                <tr class="product-header">
+                    <td colspan="100%" class="text-center">
+                        <b>{{ item.product.name }}</b>
+                    </td>
                 </tr>
-
 
                 <!-- SUB PRODUCTS -->
                 {% for sub in item.subs %}
                 <tr>
-                    <td style="padding-left:30px;">↳ {{ sub.name }}</td>
 
+                    <!-- NAME -->
+                    <td class="text-start">
+                        {{ sub.name|default:item.product.name }}
+                    </td>
+
+                    <!-- VARIANTS -->
                     {% for col in columns %}
-                        <td>
+                        <td class="variant-cell">
                             {% for v in sub.variant_list %}
                                 {% if v.column == col %}
                                     ₹{{ v.price }}
@@ -124,34 +164,37 @@
                         </td>
                     {% endfor %}
 
-                    <td style="text-align:left;">
-                        <div><b>Total: {{ sub.total_stock }}</b></div>
+                    <!-- STOCK -->
+                    <td class="text-start stock-box">
+                        <div><b>Total:</b> {{ sub.total_stock }}</div>
 
-                        <ul class="mb-0">
-                            {% for b in branches %}
-                                {% with val=sub.branch_stock|get_item:b.id %}
-                                    {% if val %}
-                                        <li>{{ b.name }} → {{ val }}</li>
-                                    {% endif %}
-                                {% endwith %}
-                            {% endfor %}
-                        </ul>
+                        {% for b in branches %}
+                            {% with val=sub.branch_stock|get_item:b.id %}
+                                {% if val %}
+                                    <div>{{ b.name }}: {{ val }}</div>
+                                {% endif %}
+                            {% endwith %}
+                        {% endfor %}
                     </td>
 
-                    <td class="text-center">
+                    <!-- ACTION -->
+                    <td>
+                        <a href="?edit={{ sub.id }}"
+                           class="btn btn-sm btn-outline-primary p-1">
+                           <li class="fas fa-pen"></li>
+                        </a>
 
-                         <!-- EDIT -->
-                         <a href="?edit={{ sub.id }}" 
-                            class="btn btn-sm btn-outline-primary me-1">
-                             <i class="fas fa-edit"></i>
-                         </a>
-                     
-                         <!-- DELETE -->
-                         <a href="/delete_product/{{ sub.id }}" 
-                            class="btn btn-sm btn-outline-danger">
-                             <i class="fas fa-trash"></i>
-                         </a>
+                        <a href="/delete_product/{{ sub.id }}"
+                           class="btn btn-sm btn-outline-danger p-1">
+                           <li class="fas fa-trash"></li>
+                        </a>
+                    </td>
 
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="100%" class="text-muted text-center">
+                        No variants
                     </td>
                 </tr>
                 {% endfor %}
@@ -165,6 +208,7 @@
             </tbody>
 
         </table>
+        </div>
 
     </div>
 </div>

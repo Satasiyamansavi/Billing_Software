@@ -31,21 +31,33 @@
                 <th>Product</th>
                 <th>Branch</th> 
                 <th>Quantity</th>
-                <th>Price</th>
                 <th>Total</th>
-                <th>Date</th>
+                <th>Action</th> <!-- 🔥 new -->
             </tr>
         </thead>
 
         <tbody>
             {% for p in data %}
             <tr>
-                <td>{{ p.product.name }}</td>
-                <td>{{ p.branch.name }}</td> 
-                <td>{{ p.quantity }}</td>
-                <td>{{ p.price }}</td>
-                <td>{{ p.total }}</td>
-                <td>{{ p.date }}</td>
+                <td>{{ p.product__name }}</td>
+                <td>{{ p.branch__name }}</td>
+                <td>{{ p.total_qty }}</td>
+                <td>{{ p.total_amount }}</td>
+        
+                <td>
+                    {% if p.last_id %}
+                    <a href="{% url 'purchase_edit' p.last_id %}" class="btn btn-sm btn-outline-primary p-1">
+                        <li class="fas fa-pen"></li>
+                    </a>
+        
+                    <a href="{% url 'purchase_delete' p.last_id %}" 
+                       class="btn btn-sm btn-outline-danger p-1">
+                        <li class="fas fa-trash"></li>
+                    </a>
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
             </tr>
             {% endfor %}
         </tbody>

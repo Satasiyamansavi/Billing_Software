@@ -1,12 +1,12 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required , user_passes_test
-from django.db.models import Sum, F , Q
+from django.db.models import Sum, F , Q , Max ,Count
 from django.db.models.functions import TruncDate , TruncMonth, TruncDay, TruncYear, TruncWeek
 from django.http import HttpResponse
 from io import BytesIO
 from .utils.common import amount_in_words
-from .models import Invoice, InvoiceItem , Purchase , Dealer, DealerOrder, DealerOrderItem, Product ,UserProfile , Customer , Variant , BranchStock ,Category
+from .models import Invoice, InvoiceItem , Purchase , Dealer, DealerOrder, DealerOrderItem, Product ,UserProfile , Customer , Variant , BranchStock ,Category , StockTransfer
 from decimal import Decimal
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
 from reportlab.lib import colors
@@ -18,6 +18,8 @@ from .models import *
 from .forms import *
 import urllib.parse
 from .forms import ProductForm
+from datetime import timedelta
+
 
 def is_admin(user):
     return hasattr(user, 'userprofile') and user.userprofile.role == 'Admin'
@@ -77,14 +79,18 @@ def logout_view(request):
     logout(request)
     return redirect('login')
 
+from django.utils.timezone import now
+
 def dashboard(request):
 
     filter_type = request.GET.get('filter', 'monthly')
 
+    # 🔹 COUNTS
     customer_count = Customer.objects.count()
-    product_count = Product.objects.count()
+    product_count = Product.objects.filter(parent__isnull=True).count()
     invoice_count = Invoice.objects.count()
 
+    # 🔹 TOTALS
     total_sales = Invoice.objects.aggregate(total=Sum('total'))['total'] or 0
     total_purchase = Purchase.objects.aggregate(total=Sum('total'))['total'] or 0
 
@@ -93,36 +99,50 @@ def dashboard(request):
 
     profit_total = total_sales - total_purchase
 
+    # 🔹 FILTER LOGIC
     if filter_type == "daily":
         sales_qs = Invoice.objects.annotate(d=TruncDay('date'))
         purchase_qs = Purchase.objects.annotate(d=TruncDay('date'))
         fmt = "%d %b"
 
+        today = now().date()
+        sales_qs = sales_qs.filter(date__date=today)
+        purchase_qs = purchase_qs.filter(date__date=today)
+
     elif filter_type == "weekly":
-        sales_qs = Invoice.objects.annotate(d=TruncWeek('date'))
-        purchase_qs = Purchase.objects.annotate(d=TruncWeek('date'))
-        fmt = "Week %W"
+        sales_qs = Invoice.objects.annotate(d=TruncDay('date'))
+        purchase_qs = Purchase.objects.annotate(d=TruncDay('date'))
+        fmt = "%d %b"
+
+        today = now().date()
+        start_week = today - timedelta(days=today.weekday())
+
+        sales_qs = sales_qs.filter(date__date__gte=start_week)
+        purchase_qs = purchase_qs.filter(date__date__gte=start_week)
 
     elif filter_type == "yearly":
         sales_qs = Invoice.objects.annotate(d=TruncYear('date'))
         purchase_qs = Purchase.objects.annotate(d=TruncYear('date'))
         fmt = "%Y"
 
-    else:
+    else:  # monthly
         sales_qs = Invoice.objects.annotate(d=TruncMonth('date'))
         purchase_qs = Purchase.objects.annotate(d=TruncMonth('date'))
         fmt = "%b %Y"
 
+    # 🔹 AGGREGATE
     sales_data = sales_qs.values('d').annotate(total=Sum('total')).order_by('d')
     purchase_data = purchase_qs.values('d').annotate(total=Sum('total')).order_by('d')
 
+    # 🔹 MAP (for quick lookup)
     purchase_map = {
         item['d']: Decimal(str(item['total'] or 0))
         for item in purchase_data
     }
 
-    table_data = []
+    # 🔹 FINAL OUTPUT
     labels, sales, purchase, profit = [], [], [], []
+    table_data = []
 
     for item in sales_data:
         date = item['d']
@@ -211,31 +231,34 @@ def delete_customer(request, id):
 
 
 # 📦 PRODUCT + 🔍 SEARCH
+
 def product_list(request):
-    query = request.GET.get('q')
 
     # 🔍 SEARCH
+    query = request.GET.get('q')
+
     if query:
         all_products = Product.objects.filter(name__icontains=query)
     else:
         all_products = Product.objects.all()
 
+    # 🔥 BRANCHES
     branches = Branch.objects.all()
 
-    # 🔥 COLUMN STRUCTURE
+    # 🔥 COLUMNS (SIZE / TYPE)
     columns = ['MAIN', '2P', 'AUXA', 'AUXB', '3', '4', '5', '6']
 
-    # 🔥 MAIN PRODUCTS ONLY
+    # 🔥 ONLY MAIN PRODUCTS
     main_products = all_products.filter(parent__isnull=True)
 
     final_data = []
 
     for p in main_products:
 
-        # 🔹 VARIANTS
+        # 🔹 MAIN PRODUCT VARIANTS
         p.variant_list = p.variants.all()
 
-        # 🔹 BRANCH STOCK
+        # 🔹 MAIN PRODUCT STOCK
         p.branch_stock = {}
         for b in branches:
             stock = BranchStock.objects.filter(product=p, branch=b).aggregate(
@@ -250,8 +273,11 @@ def product_list(request):
         subs = Product.objects.filter(parent=p)
 
         for s in subs:
+
+            # 🔹 VARIANTS
             s.variant_list = s.variants.all()
 
+            # 🔹 STOCK
             s.branch_stock = {}
             for b in branches:
                 stock = BranchStock.objects.filter(product=s, branch=b).aggregate(
@@ -275,16 +301,18 @@ def product_list(request):
 
     # 🔥 SAVE PRODUCT + VARIANTS
     if request.method == "POST" and form.is_valid():
+
         product = form.save()
 
         sizes = request.POST.getlist('size[]')
         prices = request.POST.getlist('price[]')
 
-        # OLD DELETE
+        # 🔴 DELETE OLD VARIANTS
         product.variants.all().delete()
 
-        # SAVE NEW
+        # 🔥 CREATE NEW VARIANTS
         for i, (s, p_val) in enumerate(zip(sizes, prices)):
+
             if s and p_val:
                 Variant.objects.create(
                     product=product,
@@ -302,7 +330,6 @@ def product_list(request):
         'columns': columns,
         'branches': branches
     })
-
 
 def delete_product(request, id):
     Product.objects.filter(id=id).delete()
@@ -537,31 +564,38 @@ def payment(request):
 
 # 🛒 PURCHASE
 
+
 def purchase_list(request):
-    data = Purchase.objects.all()
     form = PurchaseForm(request.POST or None)
     branches = Branch.objects.all()
 
+    # 🔥 GROUP + KEEP ONE ID
+    data = Purchase.objects.values(
+        'product',
+        'product__name',
+        'branch',
+        'branch__name'
+    ).annotate(
+        total_qty=Sum('quantity'),
+        total_amount=Sum('total'),
+        last_id=Max('id')   # 👈 edit/delete mate
+    )
+
     if request.method == "POST" and form.is_valid():
         purchase = form.save(commit=False)
-
         purchase.total = purchase.quantity * purchase.price
 
-        product = purchase.product
-        branch = purchase.branch
-        qty = purchase.quantity
-
+        # stock update
         stock, created = BranchStock.objects.get_or_create(
-            product=product,
-            branch=branch,
+            product=purchase.product,
+            branch=purchase.branch,
             defaults={'stock': 0}
         )
 
-        stock.stock += qty
+        stock.stock += purchase.quantity
         stock.save()
 
         purchase.save()
-
         return redirect('purchase')
 
     return render(request, 'purchase.html', {
@@ -570,14 +604,50 @@ def purchase_list(request):
         'branches': branches
     })
 
+def purchase_edit(request, id):
+    purchase = Purchase.objects.get(id=id)
+    form = PurchaseForm(request.POST or None, instance=purchase)
+
+    if form.is_valid():
+        purchase = form.save(commit=False)
+        purchase.total = purchase.quantity * purchase.price
+        purchase.save()
+        return redirect('purchase')
+
+    return render(request, 'purchase.html', {
+        'form': form,
+        'data': Purchase.objects.all(),
+        'branches': Branch.objects.all()
+    })
+
+def purchase_delete(request, id):
+    purchase = Purchase.objects.get(id=id)
+
+    # 🔥 stock reverse (important)
+    stock = BranchStock.objects.filter(
+        product=purchase.product,
+        branch=purchase.branch
+    ).first()
+
+    if stock:
+        stock.stock -= purchase.quantity
+        stock.save()
+
+    purchase.delete()
+    return redirect('purchase')
+
+
 # ⚠️ LOW STOCK (UPDATED)
 
 def low_stock(request):
-    products = Product.objects.all()
+
+    # 🔥 ONLY SUB PRODUCTS
+    products = Product.objects.filter(parent__isnull=False)
 
     items = []
 
     for p in products:
+
         total_stock = BranchStock.objects.filter(product=p).aggregate(
             total=Sum('stock')
         )['total'] or 0
@@ -589,7 +659,6 @@ def low_stock(request):
     return render(request, 'low_stock.html', {'items': items})
 
 from django.utils import timezone
-from datetime import timedelta
 
 def is_admin(user):
     return user.is_superuser
@@ -861,11 +930,49 @@ def dead_stock(request):
     return render(request, 'dead_stock.html', {'data': data})
 
 def owner_dashboard(request):
-    return render(request, 'owner_dashboard.html', {
-        'sales': Invoice.objects.aggregate(Sum('total'))['total__sum'] or 0,
-        'stock': Product.objects.aggregate(Sum('stock'))['stock__sum'] or 0,
-        'customers': Customer.objects.count()
-    })
+
+    total_sales = Invoice.objects.aggregate(total=Sum('total'))['total']
+    total_sales = Decimal(total_sales or 0)
+
+    total_purchase = Purchase.objects.aggregate(total=Sum('total'))['total']
+    total_purchase = Decimal(total_purchase or 0)
+
+    profit = total_sales - total_purchase
+
+    total_customers = Customer.objects.count()
+
+    total_products = Product.objects.count()
+
+    total_stock = Product.objects.aggregate(total=Sum('stock'))['total'] or 0
+
+    low_stock = Product.objects.filter(stock__lte=5).count()
+
+    total_paid = Invoice.objects.aggregate(total=Sum('paid'))['total']
+    total_paid = Decimal(total_paid or 0)
+
+    outstanding = total_sales - total_paid
+
+    threshold_date = now() - timedelta(days=90)
+
+    dead_products = Product.objects.exclude(
+        invoiceitem__invoice__date__gte=threshold_date
+    ).distinct().count()
+
+    context = {
+        'sales': total_sales,
+        'purchase': total_purchase,
+        'profit': profit,
+
+        'customers': total_customers,
+        'outstanding': outstanding,
+
+        'products': total_products,
+        'stock': total_stock,
+        'low_stock': low_stock,
+        'dead_stock': dead_products,
+    }
+
+    return render(request, 'owner_dashboard.html', context)
 
 def branch_view(request):
     if request.method == "POST":
@@ -892,7 +999,10 @@ def branch_delete(request, id):
     return redirect('branch')
 
 def stock_transfer(request):
-    products = Product.objects.all()
+
+    # Parent products
+    parents = Product.objects.filter(parent__isnull=True).prefetch_related('subs')
+
     branches = Branch.objects.all()
     branch_stock = BranchStock.objects.all()
 
@@ -913,9 +1023,11 @@ def stock_transfer(request):
         if from_stock.stock < qty:
             return HttpResponse("Not enough stock in FROM branch")
 
+        # ➖ Deduct
         from_stock.stock -= qty
         from_stock.save()
 
+        # ➕ Add
         to_stock, created = BranchStock.objects.get_or_create(
             product=product,
             branch=to_branch,
@@ -925,6 +1037,7 @@ def stock_transfer(request):
         to_stock.stock += qty
         to_stock.save()
 
+        # Save transfer
         StockTransfer.objects.create(
             product=product,
             from_branch=from_branch,
@@ -932,6 +1045,7 @@ def stock_transfer(request):
             quantity=qty
         )
 
+        # Update total stock
         total_stock = BranchStock.objects.filter(product=product).aggregate(
             total=Sum('stock')
         )['total'] or 0
@@ -942,10 +1056,15 @@ def stock_transfer(request):
         return redirect('stock_transfer')
 
     return render(request, 'stock_transfer.html', {
-        'products': products,
+        'parents': parents,
         'branches': branches,
         'branch_stock': branch_stock
     })
+
+def delete_stock(request, id):
+    stock = get_object_or_404(BranchStock, id=id)
+    stock.delete()
+    return redirect('stock_transfer')
 
 # 🧑‍💼 DEALER DASHBOARD
 @user_passes_test(is_dealer_or_admin)

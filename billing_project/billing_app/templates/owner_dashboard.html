@@ -1,30 +1,69 @@
 {% extends 'base.html' %}
 {% block content %}
 
-<h3>Owner Dashboard</h3>
+<div class="container-fluid">
 
-<div class="row">
-
-<div class="col-md-4">
-    <div class="card p-3 bg-success text-white">
-        <h5>Total Sales</h5>
-        <h3>₹{{ sales | floatformat:2}}</h3>
+    <!-- 🔝 HEADER -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="fw-bold">Owner Dashboard</h3>
     </div>
-</div>
 
-<div class="col-md-4">
-    <div class="card p-3 bg-primary text-white">
-        <h5>Total Stock</h5>
-        <h3>{{ stock }}</h3>
-    </div>
-</div>
+    <!-- 🔥 STAT STRIP (TOP BAR) -->
+    <div class="bg-white shadow-sm p-3 mb-4 rounded">
+        <div class="row text-center">
 
-<div class="col-md-4">
-    <div class="card p-3 bg-warning text-dark">
-        <h5>Total Customers</h5>
-        <h3>{{ customers }}</h3>
+            <div class="col">
+                <h6 class="text-muted">Sales</h6>
+                <h4 class="fw-bold text-success">₹{{ sales|floatformat:2 }}</h4>
+            </div>
+
+            <div class="col border-start">
+                <h6 class="text-muted">Purchase</h6>
+                <h4 class="fw-bold text-danger">₹{{ purchase|floatformat:2 }}</h4>
+            </div>
+
+            <div class="col border-start">
+                <h6 class="text-muted">Profit</h6>
+                <h4 class="fw-bold">₹{{ profit|floatformat:2 }}</h4>
+            </div>
+
+            <div class="col border-start">
+                <h6 class="text-muted">Outstanding</h6>
+                <h4 class="fw-bold text-warning">₹{{ outstanding|floatformat:2 }}</h4>
+            </div>
+
+        </div>
     </div>
-</div>
+
+    <!-- 📊 BUSINESS SUMMARY TABLE -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body">
+
+            <h5 class="mb-3">Business Summary</h5>
+
+            <table class="table table-bordered text-center align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Customers</th>
+                        <th>Products</th>
+                        <th>Total Stock</th>
+                        <th>Low Stock</th>
+                        <th>Dead Stock</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>{{ customers }}</td>
+                        <td>{{ products }}</td>
+                        <td>{{ stock }}</td>
+                        <td class="text-danger fw-bold">{{ low_stock }}</td>
+                        <td class="text-dark fw-bold">{{ dead_stock }}</td>
+                    </tr>
+                </tbody>
+            </table>
+
+        </div>
+    </div>    
 
 </div>
 

@@ -12,13 +12,21 @@
             {% csrf_token %}
 
             <div class="col-md-3">
-                <label>Product</label>
-                <select name="product" class="form-control" required>
-                    <option value="">Select Product</option>
-                    {% for p in products %}
-                        <option value="{{ p.id }}">{{ p.name }}</option>
-                    {% endfor %}
-                </select>
+               <label>Product</label>
+               <select name="product" class="form-control" required>
+                   <option value="">Select Product</option>
+           
+                   {% for parent in parents %}
+                       <optgroup label="{{ parent.name }}">
+                           {% for sub in parent.subs.all %}
+                               <option value="{{ sub.id }}">
+                                   {{ sub.name }}
+                               </option>
+                           {% endfor %}
+                       </optgroup>
+                   {% endfor %}
+           
+               </select>
             </div>
 
             <div class="col-md-3">
@@ -75,6 +83,7 @@
                     <th>Branch</th>
                     <th>Stock</th>
                     <th>Status</th>
+                    <th>Action</th>
                 </tr>
             </thead>
 
@@ -82,7 +91,7 @@
             {% for s in branch_stock %}
             <tr>
 
-                <td>{{ s.product.name }}</td>
+                <td>{{ s.product.parent.name }} - {{ s.product.name }}</td>
                 <td>{{ s.branch.name }}</td>
 
                 <td>
@@ -98,6 +107,13 @@
                     {% else %}
                         <span class="badge bg-success">OK</span>
                     {% endif %}
+                </td>
+                <td>
+                    <!-- 🗑️ Delete -->
+                    <a href="{% url 'delete_stock' s.id %}" 
+                       class="btn btn-sm btn-outline-danger">
+                        <li class="fas fa-trash"></li>
+                    </a>
                 </td>
 
             </tr>

@@ -44,7 +44,11 @@ class Product(models.Model):
     hsn = models.CharField(max_length=20, blank=True, null=True)
     gst = models.FloatField(default=18)
     category = models.ForeignKey(Category, on_delete=models.CASCADE, null=True, blank=True)
-    parent = models.ForeignKey('self',on_delete=models.CASCADE,null=True,blank=True,related_name='children')
+    parent = models.ForeignKey('self',on_delete=models.CASCADE,null=True,blank=True,related_name='subs')
+
+    def is_main(self):
+        return self.parent is None
+
     def __str__(self):
         return self.name
     
@@ -139,6 +143,7 @@ class Invoice(models.Model):
     sgst = models.FloatField(default=0)
     igst = models.FloatField(default=0)
     amount_words = models.TextField(blank=True)
+    paid = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
     def __str__(self):
         return f"Invoice {self.id}"
