@@ -21,6 +21,6 @@ from billing_app import views
 urlpatterns = [
     path('', include('billing_app.urls')),
     path('admin/', admin.site.urls), 
-    path('', views.login_view),
+    path('', views.login_view, name='login'),
 
 ]
