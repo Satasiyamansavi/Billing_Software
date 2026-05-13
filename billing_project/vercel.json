@@ -2,14 +2,19 @@
   "version": 2,
   "builds": [
     {
-      "src": "billing_project/asgi.py",
+      "src": "manage.py",
       "use": "@vercel/python"
     }
   ],
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 10
+    }
+  },
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "billing_project/asgi.py"
+      "dest": "manage.py"
     }
   ]
 }
