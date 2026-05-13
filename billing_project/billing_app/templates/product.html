@@ -1,240 +1,609 @@
-{% extends 'base.html' %}
-{% load custom_tags %}
-{% block content %}
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h3 class="fw-bold">Product Management</h3>
+    {% extends 'base.html' %}
+    {% load custom_tags %}
+    {% block content %}
 
-    <form method="get" class="d-flex">
-        <input type="text" name="q" value="{{ request.GET.q }}"
-               placeholder="Search Product"
-               class="form-control me-2" style="width:250px;">
-        <button class="btn btn-primary">Search</button>
-    </form>
-</div>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="fw-bold">Product Management</h3>
 
-<!-- ADD / EDIT -->
-<div class="card shadow mb-4">
-    <div class="card-body">
-        <h5>{% if product_to_edit %}Edit{% else %}Add{% endif %} Product</h5>
+        <form method="get" class="d-flex">
+            <input type="text"
+                name="q"
+                value="{{ request.GET.q }}"
+                placeholder="Search Product"
+                class="form-control me-2"
+                style="width:250px;">
 
-        <form method="post">
-            {% csrf_token %}
-
-            {{ form.as_p }}
-
-            <hr>
-            <h6>Variants (Optional)</h6>
-
-            <div id="variants">
-
-                {% if product_to_edit %}
-                    {% for v in product_to_edit.variants.all %}
-                    <div class="row mb-2">
-
-                        <div class="col">
-                            <select name="size[]" class="form-control">
-                                <option value="">Select Size</option>
-                                {% for col in columns %}
-                                    <option value="{{ col }}" {% if v.size == col %}selected{% endif %}>
-                                        {{ col }}
-                                    </option>
-                                {% endfor %}
-                            </select>
-                        </div>
-
-                        <div class="col">
-                            <input type="number" name="price[]" class="form-control" value="{{ v.price }}">
-                        </div>
-
-                    </div>
-                    {% endfor %}
-
-                {% else %}
-                    <div class="row mb-2">
-
-                        <div class="col">
-                            <select name="size[]" class="form-control">
-                                <option value="">Select Size</option>
-                                {% for col in columns %}
-                                    <option value="{{ col }}">{{ col }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-
-                        <div class="col">
-                            <input type="number" name="price[]" class="form-control" placeholder="Price">
-                        </div>
-
-                    </div>
-                {% endif %}
-
-            </div>
-
-            <button type="button" onclick="addRow()" class="btn btn-success mb-2">+ Add Variant</button>
-
-            <button class="btn btn-primary w-100">
-                {% if product_to_edit %}Update{% else %}Add{% endif %}
+            <button class="btn btn-primary">
+                Search
             </button>
         </form>
     </div>
-</div>
 
-<!-- TABLE -->
-<style>
-.table-sm td, .table-sm th {
-    padding: 6px !important;
-    font-size: 13px;
-    vertical-align: middle;
-}
+    <form method="post" enctype="multipart/form-data" class="mb-3">
 
-.compact-text {
-    font-size: 12px;
-    margin: 0;
-}
+        {% csrf_token %}
 
-.variant-cell {
-    min-width: 70px;
-    white-space: nowrap;
-}
+        <input type="file" name="excel_file" required>
 
-.product-header {
-    background: #f1f3f5;
-    font-size: 14px;
-}
+        <button class="btn btn-success">
+            Upload Excel
+        </button>
 
-.stock-box {
-    font-size: 12px;
-    line-height: 1.3;
-}
+    </form>
 
-.table tbody tr:hover {
-    background: #fafafa;
-}
-</style>
+    <div class="card shadow mb-4">
 
+        <div class="card-body">
 
-<div class="card shadow">
-    <div class="card-body p-2">
+            <h5>
 
-        <div class="table-responsive">
-        <table class="table table-bordered table-sm text-center align-middle">
+                {% if product_to_edit %}
+                    Edit
+                {% else %}
+                    Add
+                {% endif %}
 
-            <thead class="table-dark">
-                <tr>
-                    <th style="width:160px;">Product</th>
+                Product
 
-                    {% for col in columns %}
-                        <th class="variant-cell">{{ col }}</th>
-                    {% endfor %}
+            </h5>
 
-                    <th style="width:180px;">Stock</th>
-                    <th style="width:90px;">Action</th>
-                </tr>
-            </thead>
+            <form method="post">
 
-            <tbody>
+                {% csrf_token %}
 
-            {% for item in data %}
+                {{ form.as_p }}
 
-                <!-- MAIN PRODUCT -->
-                <tr class="product-header">
-                    <td colspan="100%" class="text-center">
-                        <b>{{ item.product.name }}</b>
-                    </td>
-                </tr>
+                <hr>
 
-                <!-- SUB PRODUCTS -->
-                {% for sub in item.subs %}
-                <tr>
+                <h6>Variants</h6>
 
-                    <!-- NAME -->
-                    <td class="text-start">
-                        {{ sub.name|default:item.product.name }}
-                    </td>
+                <div id="variants">
 
-                    <!-- VARIANTS -->
-                    {% for col in columns %}
-                        <td class="variant-cell">
-                            {% for v in sub.variant_list %}
-                                {% if v.column == col %}
-                                    ₹{{ v.price }}
-                                {% endif %}
-                            {% endfor %}
-                        </td>
-                    {% endfor %}
+                    <div class="row mb-2 variant-row">
 
-                    <!-- STOCK -->
-                    <td class="text-start stock-box">
-                        <div><b>Total:</b> {{ sub.total_stock }}</div>
+                        <div class="col-md-3">
+            
+                            <select name="column[]" class="form-control">
+            
+                                <option value="">
+                                    Select Variant
+                                </option>
+            
+                                {% for col in columns %}
+            
+                                    <option value="{{ col }}">
+                                        {{ col }}
+                                    </option>
+            
+                                {% endfor %}
+            
+                            </select>
+            
+                        </div>
+            
+                        <div class="col-md-3">
+            
+                            <input type="number"
+                                name="base_price[]"
+                                class="form-control"
+                                placeholder="Variant Price">
+            
+                        </div>
+            
+                        <div class="col-md-3">
+            
+                            <input type="text"
+                                   name="custom_size[]"
+                                   class="form-control"
+                                   placeholder='34",36",45"'>
+                        
+                        </div>
+                        
+                        <div class="col-md-2">
+                        
+                            <input type="text"
+                                   name="custom_price[]"
+                                   class="form-control"
+                                   placeholder='40000,30000,25000'>
+                        
+                        </div>
+            
+                        <div class="col-md-1">
+            
+                            <button type="button"
+                                    class="btn btn-danger"
+                                    onclick="removeRow(this)">
+            
+                                Remove
+            
+                            </button>
+            
+                        </div>
+            
+                    </div>
 
-                        {% for b in branches %}
-                            {% with val=sub.branch_stock|get_item:b.id %}
-                                {% if val %}
-                                    <div>{{ b.name }}: {{ val }}</div>
-                                {% endif %}
-                            {% endwith %}
-                        {% endfor %}
-                    </td>
+                </div>
 
-                    <!-- ACTION -->
-                    <td>
-                        <a href="?edit={{ sub.id }}"
-                           class="btn btn-sm btn-outline-primary p-1">
-                           <li class="fas fa-pen"></li>
-                        </a>
+                <button type="button"
+                        onclick="addRow()"
+                        class="btn btn-success mb-2">
 
-                        <a href="/delete_product/{{ sub.id }}"
-                           class="btn btn-sm btn-outline-danger p-1">
-                           <li class="fas fa-trash"></li>
-                        </a>
-                    </td>
+                    + Add Variant
 
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="100%" class="text-muted text-center">
-                        No variants
-                    </td>
-                </tr>
-                {% endfor %}
+                </button>
 
-            {% empty %}
-                <tr>
-                    <td colspan="100%">No Data</td>
-                </tr>
-            {% endfor %}
+                <button class="btn btn-primary w-100">
 
-            </tbody>
+                    {% if product_to_edit %}
+                        Update
+                    {% else %}
+                        Add
+                    {% endif %}
 
-        </table>
+                </button>
+
+            </form>
+
         </div>
 
     </div>
-</div>
 
-<script>
-function addRow(){
-    let html = `
-    <div class="row mb-2">
 
-        <div class="col">
-            <select name="size[]" class="form-control">
-                <option value="">Select Size</option>
-                {% for col in columns %}
-                    <option value="{{ col }}">{{ col }}</option>
-                {% endfor %}
-            </select>
-        </div>
+<style>
 
-        <div class="col">
-            <input type="number" name="price[]" class="form-control" placeholder="Price">
-        </div>
-
-    </div>`;
-
-    document.getElementById('variants').insertAdjacentHTML('beforeend', html);
+.custom-table{
+    font-size:12px;
+    border:1px solid #000;
+    table-layout:fixed;
+    width:100%;
 }
-</script>
 
-{% endblock %}
+.custom-table th,
+.custom-table td{
+    border:1px solid #000 !important;
+    padding:0 !important;
+    vertical-align:top;
+    overflow:hidden;
+}
+
+.custom-table thead th{
+    background:#000 !important;
+    color:#fff !important;
+    text-align:center;
+    font-weight:700;
+    padding:6px 4px !important;
+    font-size:12px;
+}
+
+.main-product-row td{
+    background:#fff !important;
+    color:#000 !important;
+    font-weight:700;
+    text-align:center;
+    padding:6px !important;
+    border-top:3px solid #000 !important;
+    border-bottom:3px solid #000 !important;
+    font-size:14px;
+}
+
+.remove-btn{
+    height:38px;
+    border-radius:6px;
+    font-size:13px;
+    font-weight:600;
+    padding:0 10px;
+    white-space:nowrap;
+}
+.col-product{
+    width:160px;
+    padding:0 !important;
+    font-weight:700;
+    color:#000;
+}
+
+.col-section{
+    width:70px;
+    padding:0 !important;
+    font-weight:700;
+    color:#000;
+}
+
+.line-box{
+    height:38px;
+    border-bottom:1px solid #000;
+    display:flex;
+    align-items:center;
+    justify-content:flex-start;
+    padding-left:6px;
+    background:#fff;
+    font-size:12px;
+}
+
+.line-box:last-child{
+    border-bottom:none;
+}
+
+.col-variant{
+    width:78px;
+    background:#fff;
+}
+
+.col-stock{
+    width:120px;
+    padding:6px !important;
+    font-size:11px;
+    line-height:1.3;
+}
+
+.col-action{
+    width:70px;
+    padding:4px !important;
+}
+
+.variant-box{
+    height:38px;
+    border-bottom:1px solid #000;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:#fff;
+    font-size:12px;
+}
+
+.variant-box:last-child{
+    border-bottom:none;
+}
+
+.main-price{
+    font-size:13px;
+    font-weight:700;
+    color:#000;
+}
+
+.variant-size{
+    font-size:12px;
+    font-weight:700;
+    color:#000;
+}
+
+.variant-price{
+    font-size:12px;
+    color:#000;
+    font-weight:700;
+}
+
+
+.table-responsive{
+    overflow-x:auto;
+}
+
+.btn-sm{
+    padding:2px 6px !important;
+    font-size:11px !important;
+}
+
+</style>
+
+    <div class="card shadow">
+
+        <div class="card-body p-2">
+
+            <div class="table-responsive">
+
+                <table class="table table-bordered custom-table text-center align-middle">
+
+                    <thead>
+
+                        <tr>
+
+                            <th class="col-product">
+                                Product
+                            </th>
+
+                            <th class="col-section">
+                                Section
+                            </th>
+
+                            {% for col in columns %}
+
+                                <th class="col-variant">
+                                    {{ col }}
+                                </th>
+
+                            {% endfor %}
+
+                            <th class="col-stock">
+                                Stock
+                            </th>
+
+                            <th class="col-action">
+                                Action
+                            </th>
+
+                        </tr>
+
+                    </thead>
+
+                    <tbody>
+
+                    {% for item in data %}
+
+                        <tr class="main-product-row">
+
+                            <td colspan="{{ columns|length|add:4 }}">
+
+                                {{ item.product.name }}
+
+                            </td>
+
+                        </tr>
+
+                        {% for sub in item.subs %}
+
+                        <tr>
+
+                            <td class="col-product">
+
+                                {% with max_rows=sub.max_rows %}
+
+                                    {% for i in ""|center:max_rows %}
+
+                                        <div class="line-box">
+
+                                            {% if forloop.first %}
+                                                {{ sub.name }}
+                                            {% endif %}
+
+                                        </div>
+
+                                    {% endfor %}
+
+                                {% endwith %}
+
+                            </td>
+
+                            <td class="col-section">
+
+                                {% with max_rows=sub.max_rows %}
+
+                                    {% for i in ""|center:max_rows %}
+
+                                        <div class="line-box">
+
+                                            {% if forloop.first %}
+                                                {{ sub.section|default:"-" }}
+                                            {% endif %}
+
+                                        </div>
+
+                                    {% endfor %}
+
+                                {% endwith %}
+
+                            </td>
+                                                       
+                            {% for col in columns %}
+                            
+                            <td class="col-variant">
+                            
+                                {% with key=col|upper %}
+                                {% with variants=sub.variant_map|get_item:key %}
+                            
+                                    {% if variants %}
+                            
+                                        {% with used_rows=variants|row_count %}
+                            
+                                            {% for v in variants %}
+                            
+                                                {% if v.size == v.column %}
+                                                        
+                                                    <div class="variant-box">
+                            
+                                                        <div class="main-price">
+                            
+                                                            ₹{{ v.price }}
+                            
+                                                        </div>
+                            
+                                                    </div>
+                            
+                                                {% else %}
+                                                        
+                                                    <div class="variant-box">
+                            
+                                                        <div class="variant-size">
+                            
+                                                            {{ v.size }}
+                            
+                                                        </div>
+                            
+                                                    </div>
+                                                        
+                                                    <div class="variant-box">
+                            
+                                                        <div class="variant-price">
+                            
+                                                            ₹{{ v.price }}
+                            
+                                                        </div>
+                            
+                                                    </div>
+                            
+                                                {% endif %}
+                            
+                                            {% endfor %}
+                                                        
+                                            {% with remaining=sub.max_rows|subtract:used_rows %}
+                            
+                                                {% if remaining > 0 %}
+                            
+                                                    {% for i in ""|center:remaining %}
+                            
+                                                        <div class="variant-box">-</div>
+                            
+                                                    {% endfor %}
+                            
+                                                {% endif %}
+                            
+                                            {% endwith %}
+                            
+                                        {% endwith %}
+                            
+                                    {% else %}
+                            
+                                        {% for i in ""|center:sub.max_rows %}
+                            
+                                            <div class="variant-box">-</div>
+                            
+                                        {% endfor %}
+                            
+                                    {% endif %}
+                            
+                                {% endwith %}
+                                {% endwith %}
+                            
+                            </td>
+                            
+                            {% endfor %}
+
+                            <td class="text-start col-stock">
+
+                                <div>
+                                    <b>Total:</b>
+                                    {{ sub.total_stock }}
+                                </div>
+
+                                {% for b in branches %}
+
+                                    {% with val=sub.branch_stock|get_item:b.id %}
+
+                                        {% if val %}
+
+                                            <div>
+
+                                                {{ b.name }} : {{ val }}
+
+                                            </div>
+
+                                        {% endif %}
+
+                                    {% endwith %}
+
+                                {% endfor %}
+
+                            </td>
+
+                            <td class="col-action">
+
+                                <a href="?edit={{ sub.id }}"
+                                class="btn btn-sm btn-outline-primary">
+
+                                    <i class="fas fa-pen"></i>
+
+                                </a>
+
+                                <a href="/delete_product/{{ sub.id }}"
+                                class="btn btn-sm btn-outline-danger">
+
+                                    <i class="fas fa-trash"></i>
+
+                                </a>
+
+                            </td>
+
+                        </tr>
+
+                        {% endfor %}
+
+                    {% endfor %}
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <script>
+
+    function addRow(){
+
+        let html = `
+
+        <div class="row mb-2 variant-row">
+
+            <div class="col-md-3">
+
+                <select name="column[]" class="form-control">
+
+                    <option value="">
+                        Select Variant
+                    </option>
+
+                    {% for col in columns %}
+
+                        <option value="{{ col }}">
+                            {{ col }}
+                        </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+            <div class="col-md-3">
+
+                <input type="number"
+                    name="base_price[]"
+                    class="form-control"
+                    placeholder="Variant Price">
+
+            </div>
+
+            <div class="col-md-3">
+
+                <input type="text"
+                       name="custom_size[]"
+                       class="form-control"
+                       placeholder='34",36",45"'>
+            
+            </div>
+            
+            <div class="col-md-2">
+            
+                <input type="text"
+                       name="custom_price[]"
+                       class="form-control"
+                       placeholder='40000,30000,25000'>
+            
+            </div>
+
+            <div class="col-md-1">
+
+                <button type="button"
+                        class="btn btn-danger"
+                        onclick="removeRow(this)">
+
+                    Remove
+
+                </button>
+
+            </div>
+
+        </div>
+
+        `;
+
+        document.getElementById('variants') 
+                .insertAdjacentHTML('beforeend', html);
+    }
+
+    </script>
+
+    {% endblock %}
+

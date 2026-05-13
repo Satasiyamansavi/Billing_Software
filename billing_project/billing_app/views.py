@@ -17,8 +17,11 @@ import json
 from .models import *
 from .forms import *
 import urllib.parse
-from .forms import ProductForm
+from .forms import ProductForm 
 from datetime import timedelta
+import pandas as pd
+from django.db.models.functions import Coalesce
+from django.db.models import Sum, FloatField
 
 
 def is_admin(user):
@@ -85,12 +88,10 @@ def dashboard(request):
 
     filter_type = request.GET.get('filter', 'monthly')
 
-    # 🔹 COUNTS
     customer_count = Customer.objects.count()
     product_count = Product.objects.filter(parent__isnull=True).count()
     invoice_count = Invoice.objects.count()
 
-    # 🔹 TOTALS
     total_sales = Invoice.objects.aggregate(total=Sum('total'))['total'] or 0
     total_purchase = Purchase.objects.aggregate(total=Sum('total'))['total'] or 0
 
@@ -99,7 +100,6 @@ def dashboard(request):
 
     profit_total = total_sales - total_purchase
 
-    # 🔹 FILTER LOGIC
     if filter_type == "daily":
         sales_qs = Invoice.objects.annotate(d=TruncDay('date'))
         purchase_qs = Purchase.objects.annotate(d=TruncDay('date'))
@@ -125,22 +125,19 @@ def dashboard(request):
         purchase_qs = Purchase.objects.annotate(d=TruncYear('date'))
         fmt = "%Y"
 
-    else:  # monthly
+    else:  
         sales_qs = Invoice.objects.annotate(d=TruncMonth('date'))
         purchase_qs = Purchase.objects.annotate(d=TruncMonth('date'))
         fmt = "%b %Y"
 
-    # 🔹 AGGREGATE
     sales_data = sales_qs.values('d').annotate(total=Sum('total')).order_by('d')
     purchase_data = purchase_qs.values('d').annotate(total=Sum('total')).order_by('d')
 
-    # 🔹 MAP (for quick lookup)
     purchase_map = {
         item['d']: Decimal(str(item['total'] or 0))
         for item in purchase_data
     }
 
-    # 🔹 FINAL OUTPUT
     labels, sales, purchase, profit = [], [], [], []
     table_data = []
 
@@ -234,102 +231,294 @@ def delete_customer(request, id):
 
 def product_list(request):
 
-    # 🔍 SEARCH
-    query = request.GET.get('q')
-
-    if query:
-        all_products = Product.objects.filter(name__icontains=query)
-    else:
-        all_products = Product.objects.all()
-
-    # 🔥 BRANCHES
     branches = Branch.objects.all()
 
-    # 🔥 COLUMNS (SIZE / TYPE)
-    columns = ['MAIN', '2P', 'AUXA', 'AUXB', '3', '4', '5', '6']
+    columns = [
+        'MAIN', '2P', 'AUXA', 'AUXB',
+        '3', '4', '5', '6', '7', '8', '9', '10'
+    ]
 
-    # 🔥 ONLY MAIN PRODUCTS
-    main_products = all_products.filter(parent__isnull=True)
+    if request.method == "POST" and request.FILES.get('excel_file'):
+
+        file = request.FILES['excel_file']
+
+        df = pd.read_excel(file)
+
+        df.columns = df.columns.map(
+            lambda x: str(x).strip().upper()
+        )
+
+        for _, row in df.iterrows():
+
+            row.index = row.index.map(
+                lambda x: str(x).strip().upper()
+            )
+
+            main_name = str(
+                row.get('MAIN PRODUCT', '')
+            ).strip()
+
+            sub_name = str(
+                row.get('SUB PRODUCT', '')
+            ).strip()
+
+            section = str(
+                row.get('SECTION', '')
+            ).strip()
+
+            branch_name = str(
+                row.get('BRANCH', '')
+            ).strip()
+
+            stock_val = row.get('STOCK', 0)
+
+            if not main_name or not sub_name:
+                continue
+
+            main_product, _ = Product.objects.get_or_create(
+                name=main_name,
+                parent=None
+            )
+
+            sub_product, _ = Product.objects.get_or_create(
+                name=sub_name,
+                parent=main_product,
+                defaults={
+                    'section': section
+                }
+            )
+
+            sub_product.section = section
+            sub_product.save()
+
+            Variant.objects.filter(
+                product=sub_product
+            ).delete()
+
+            for col in columns:
+
+                normal_price = row.get(col)
+
+                size_col = f"{col}_SIZE"
+                size_price_col = f"{col}_SIZE_PRICE"
+
+                custom_size = row.get(size_col)
+                custom_price = row.get(size_price_col)
+
+                if pd.notna(normal_price) and str(normal_price).strip() != '':
+
+                    Variant.objects.create(
+                        product=sub_product,
+                        column=col,
+                        size=col,
+                        price=float(normal_price)
+                    )
+
+                if (
+                    pd.notna(custom_size)
+                    and pd.notna(custom_price)
+                    and str(custom_size).strip() != ''
+                    and str(custom_price).strip() != ''
+                ):
+
+                    Variant.objects.create(
+                        product=sub_product,
+                        column=col,
+                        size=str(custom_size).strip(),
+                        price=float(custom_price)
+                    )
+
+            if branch_name:
+
+                branch = Branch.objects.filter(
+                    name__iexact=branch_name
+                ).first()
+
+                if branch:
+
+                    BranchStock.objects.update_or_create(
+                        product=sub_product,
+                        branch=branch,
+                        defaults={
+                            'stock': int(stock_val)
+                            if pd.notna(stock_val)
+                            else 0
+                        }
+                    )
+
+        return redirect('product')
+
+    product_to_edit = None
+
+    edit_id = request.GET.get('edit')
+
+    if edit_id:
+
+        product_to_edit = Product.objects.get(
+            id=edit_id
+        )
+
+    form = ProductForm(
+        request.POST or None,
+        instance=product_to_edit
+    )
+
+    if (
+        request.method == "POST"
+        and not request.FILES.get('excel_file')
+    ):
+
+        if form.is_valid():
+
+            product = form.save(commit=False)
+
+            if product_to_edit:
+                product.id = product_to_edit.id
+
+            product.save()
+
+            columns_post = request.POST.getlist('column[]')
+            base_prices = request.POST.getlist('base_price[]')
+            custom_sizes = request.POST.getlist('custom_size[]')
+            custom_prices = request.POST.getlist('custom_price[]')
+
+            product.variants.all().delete()
+
+            for col, b_price, c_size, c_price in zip(
+                columns_post,
+                base_prices,
+                custom_sizes,
+                custom_prices
+            ):
+
+                col = str(col).strip().upper()
+
+                if col and b_price:
+
+                    Variant.objects.create(
+                        product=product,
+                        column=col,
+                        size=col,
+                        price=float(b_price)
+                    )
+
+                if col and c_size and c_price:
+
+                    sizes = [
+                        x.strip()
+                        for x in c_size.splitlines()
+                        if x.strip()
+                    ]
+
+                    prices = [
+                        x.strip()
+                        for x in c_price.splitlines()
+                        if x.strip()
+                    ]
+
+                    for size, price in zip(sizes, prices):
+
+                        Variant.objects.create(
+                            product=product,
+                            column=col,
+                            size=size,
+                            price=float(price)
+                        )
+
+            return redirect('product')
+
+    q = request.GET.get('q')
+
+    main_products_qs = Product.objects.filter(
+        parent__isnull=True
+    )
+
+    if q:
+
+        main_products_qs = main_products_qs.filter(
+            name__icontains=q
+        )
 
     final_data = []
 
-    for p in main_products:
+    for p in main_products_qs:
 
-        # 🔹 MAIN PRODUCT VARIANTS
-        p.variant_list = p.variants.all()
-
-        # 🔹 MAIN PRODUCT STOCK
-        p.branch_stock = {}
-        for b in branches:
-            stock = BranchStock.objects.filter(product=p, branch=b).aggregate(
-                total=Sum('stock')
-            )['total'] or 0
-
-            p.branch_stock[b.id] = stock
-
-        p.total_stock = sum(p.branch_stock.values())
-
-        # 🔥 SUB PRODUCTS
-        subs = Product.objects.filter(parent=p)
+        subs = Product.objects.filter(
+            parent=p
+        )
 
         for s in subs:
 
-            # 🔹 VARIANTS
-            s.variant_list = s.variants.all()
+            variants = Variant.objects.filter(
+                product=s
+            )
 
-            # 🔹 STOCK
-            s.branch_stock = {}
-            for b in branches:
-                stock = BranchStock.objects.filter(product=s, branch=b).aggregate(
-                    total=Sum('stock')
-                )['total'] or 0
+            s.variant_map = {}
 
-                s.branch_stock[b.id] = stock
+            for v in variants:
 
-            s.total_stock = sum(s.branch_stock.values())
+                key = str(v.column).strip().upper()
+
+                if key not in s.variant_map:
+                    s.variant_map[key] = []
+
+                s.variant_map[key].append({
+                    'size': v.size,
+                    'price': v.price,
+                    'column': v.column
+                })
+
+            stock_map = BranchStock.objects.filter(
+                product=s
+            ).values('branch').annotate(
+                total=Sum('stock')
+            )
+
+            s.branch_stock = {
+                item['branch']: item['total']
+                for item in stock_map
+            }
+
+            s.total_stock = (
+                sum(s.branch_stock.values())
+                if s.branch_stock else 0
+            )
+
+            max_rows = 1
+
+            for key, variant_list in s.variant_map.items():
+
+                row_count = 0
+
+                for item in variant_list:
+
+                    if item['size'] == item['column']:
+
+                        row_count += 1
+
+                    else:
+
+                        row_count += 2
+
+                if row_count > max_rows:
+
+                    max_rows = row_count
+
+            s.max_rows = max_rows
 
         final_data.append({
             "product": p,
             "subs": subs
         })
 
-    # 🔥 EDIT MODE
-    edit_id = request.GET.get('edit')
-    product = Product.objects.filter(id=edit_id).first()
-
-    form = ProductForm(request.POST or None, instance=product)
-
-    # 🔥 SAVE PRODUCT + VARIANTS
-    if request.method == "POST" and form.is_valid():
-
-        product = form.save()
-
-        sizes = request.POST.getlist('size[]')
-        prices = request.POST.getlist('price[]')
-
-        # 🔴 DELETE OLD VARIANTS
-        product.variants.all().delete()
-
-        # 🔥 CREATE NEW VARIANTS
-        for i, (s, p_val) in enumerate(zip(sizes, prices)):
-
-            if s and p_val:
-                Variant.objects.create(
-                    product=product,
-                    size=s,
-                    price=p_val,
-                    column=s if i < len(columns) else 'MAIN'
-                )
-
-        return redirect('product')
-
     return render(request, 'product.html', {
         'data': final_data,
         'form': form,
-        'product_to_edit': product,
         'columns': columns,
-        'branches': branches
+        'branches': branches,
+        'product_to_edit': product_to_edit
     })
+
 
 def delete_product(request, id):
     Product.objects.filter(id=id).delete()
@@ -342,14 +531,12 @@ def create_invoice(request):
     branches = Branch.objects.all()
     products = Product.objects.all()
 
-    # 🔥 PRODUCT JSON (MISSING BEFORE)
     product_data = {
         str(p.id): {
             "name": p.name,
         } for p in products
     }
 
-    # 🔥 VARIANT DATA
     variant_data = {}
     for v in Variant.objects.select_related('product'):
         variant_data.setdefault(str(v.product_id), [])
@@ -359,14 +546,12 @@ def create_invoice(request):
             "price": float(v.price)
         })
 
-    # 🔥 STOCK DATA (variant-wise)
     stock_data = {}
     for bs in BranchStock.objects.select_related('product', 'branch'):
         for v in bs.product.variants.all():
             stock_data.setdefault(str(bs.branch_id), {})
             stock_data[str(bs.branch_id)][str(v.id)] = bs.stock
 
-    # 🔥 CUSTOMER DATA
     customer_data = {
         str(c.id): {
             "name": c.name,
@@ -564,12 +749,10 @@ def payment(request):
 
 # 🛒 PURCHASE
 
-
 def purchase_list(request):
     form = PurchaseForm(request.POST or None)
     branches = Branch.objects.all()
 
-    # 🔥 GROUP + KEEP ONE ID
     data = Purchase.objects.values(
         'product',
         'product__name',
@@ -578,14 +761,13 @@ def purchase_list(request):
     ).annotate(
         total_qty=Sum('quantity'),
         total_amount=Sum('total'),
-        last_id=Max('id')   # 👈 edit/delete mate
+        last_id=Max('id')   
     )
 
     if request.method == "POST" and form.is_valid():
         purchase = form.save(commit=False)
         purchase.total = purchase.quantity * purchase.price
 
-        # stock update
         stock, created = BranchStock.objects.get_or_create(
             product=purchase.product,
             branch=purchase.branch,
@@ -623,7 +805,6 @@ def purchase_edit(request, id):
 def purchase_delete(request, id):
     purchase = Purchase.objects.get(id=id)
 
-    # 🔥 stock reverse (important)
     stock = BranchStock.objects.filter(
         product=purchase.product,
         branch=purchase.branch
@@ -641,7 +822,6 @@ def purchase_delete(request, id):
 
 def low_stock(request):
 
-    # 🔥 ONLY SUB PRODUCTS
     products = Product.objects.filter(parent__isnull=False)
 
     items = []
@@ -759,13 +939,30 @@ def outstanding_report(request):
 
     return render(request, 'outstanding.html', {'data': data})
 
-# 📊 ITEM SALES REPORT (NEW)
 @user_passes_test(is_admin)
 def item_sales_report(request):
-    data = InvoiceItem.objects.values('product__name').annotate(
+
+    sales = InvoiceItem.objects.values(
+        'product__parent__name',
+        'product__name'
+    ).annotate(
         total_qty=Sum('quantity')
-    )
-    return render(request, 'item_sales.html', {'data': data})
+    ).order_by('product__parent__name', 'product__name')
+
+    grouped_data = defaultdict(list)
+
+    for item in sales:
+
+        parent = item['product__parent__name'] or "Single Products"
+
+        grouped_data[parent].append({
+            'name': item['product__name'],
+            'qty': item['total_qty']
+        })
+
+    return render(request, 'item_sales.html', {
+        'grouped_data': dict(grouped_data)
+    })
 
 # 🧾 PDF
 import pdfkit
@@ -871,7 +1068,8 @@ def cashbook(request):
 
 def vehicle_mapping(request):
     vehicles = VehicleModel.objects.all()
-    products = Product.objects.all()
+
+    parents = Product.objects.filter(parent__isnull=True).prefetch_related('subs')
 
     if request.method == "POST":
         ProductVehicle.objects.create(
@@ -882,7 +1080,7 @@ def vehicle_mapping(request):
 
     return render(request, 'vehicle_mapping.html', {
         'vehicles': vehicles,
-        'products': products,
+        'parents': parents,
         'data': ProductVehicle.objects.all()
     })
 
@@ -941,11 +1139,11 @@ def owner_dashboard(request):
 
     total_customers = Customer.objects.count()
 
-    total_products = Product.objects.count()
+    total_products = Product.objects.filter(parent__isnull=False).count()
 
-    total_stock = Product.objects.aggregate(total=Sum('stock'))['total'] or 0
+    total_stock = Product.objects.filter(parent__isnull=False).aggregate(total=Sum('stock'))['total'] or 0
 
-    low_stock = Product.objects.filter(stock__lte=5).count()
+    low_stock = Product.objects.filter(parent__isnull=False,stock__lte=5).count()
 
     total_paid = Invoice.objects.aggregate(total=Sum('paid'))['total']
     total_paid = Decimal(total_paid or 0)
@@ -954,9 +1152,8 @@ def owner_dashboard(request):
 
     threshold_date = now() - timedelta(days=90)
 
-    dead_products = Product.objects.exclude(
-        invoiceitem__invoice__date__gte=threshold_date
-    ).distinct().count()
+    dead_products = Product.objects.filter(parent__isnull=False).exclude(
+            invoiceitem__invoice__date__gte=threshold_date).distinct().count()
 
     context = {
         'sales': total_sales,
@@ -1000,7 +1197,6 @@ def branch_delete(request, id):
 
 def stock_transfer(request):
 
-    # Parent products
     parents = Product.objects.filter(parent__isnull=True).prefetch_related('subs')
 
     branches = Branch.objects.all()
@@ -1023,11 +1219,9 @@ def stock_transfer(request):
         if from_stock.stock < qty:
             return HttpResponse("Not enough stock in FROM branch")
 
-        # ➖ Deduct
         from_stock.stock -= qty
         from_stock.save()
 
-        # ➕ Add
         to_stock, created = BranchStock.objects.get_or_create(
             product=product,
             branch=to_branch,
@@ -1037,7 +1231,6 @@ def stock_transfer(request):
         to_stock.stock += qty
         to_stock.save()
 
-        # Save transfer
         StockTransfer.objects.create(
             product=product,
             from_branch=from_branch,
@@ -1045,7 +1238,6 @@ def stock_transfer(request):
             quantity=qty
         )
 
-        # Update total stock
         total_stock = BranchStock.objects.filter(product=product).aggregate(
             total=Sum('stock')
         )['total'] or 0
@@ -1285,7 +1477,6 @@ def salesman_report(request):
 
     return render(request, 'salesman_report.html', {'data': data})
 
-import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 
 def get_predictions():
@@ -1379,11 +1570,94 @@ def demand_prediction(request):
     })
 
 
+@user_passes_test(is_admin)
 def ai_dashboard(request):
+
     predictions, alerts = get_predictions()
 
+    total_sales = Invoice.objects.aggregate(
+        total=Sum('total')
+    )['total'] or 0
+
+    total_invoices = Invoice.objects.count()
+
+    total_received = Invoice.objects.aggregate(
+        total=Sum('paid')
+    )['total'] or 0
+
+    total_due = Invoice.objects.aggregate(
+        total=Sum('payment')
+    )['total'] or 0
+
+    total_customers = Customer.objects.count()
+
+    top_products = InvoiceItem.objects.values(
+        'product__name'
+    ).annotate(
+        qty=Sum('quantity')
+    ).order_by('-qty')[:5]
+
+    recent_invoices = Invoice.objects.order_by('-id')[:5]
+
+    main_total = Variant.objects.filter(
+    column='MAIN'
+    ).aggregate(
+        total=Coalesce(
+            Sum('price'),
+            0.0,
+            output_field=FloatField()
+        )
+    )['total']
+    
+    p2_total = Variant.objects.filter(
+        column='2P'
+    ).aggregate(
+        total=Coalesce(
+            Sum('price'),
+            0.0,
+            output_field=FloatField()
+        )
+    )['total']
+    
+    auxa_total = Variant.objects.filter(
+        column='AUXA'
+    ).aggregate(
+        total=Coalesce(
+            Sum('price'),
+            0.0,
+            output_field=FloatField()
+        )
+    )['total']
+    
+    auxb_total = Variant.objects.filter(
+        column='AUXB'
+    ).aggregate(
+        total=Coalesce(
+            Sum('price'),
+            0.0,
+            output_field=FloatField()
+        )
+    )['total']
+
     return render(request, 'ai_dashboard.html', {
+
         'predictions': predictions,
         'alerts': alerts,
-        'alert_count': len(alerts)
+
+        'alert_count': len(alerts),
+
+        'total_sales': total_sales,
+        'total_invoices': total_invoices,
+        'total_received': total_received,
+        'total_due': total_due,
+        'total_customers': total_customers,
+
+        'top_products': top_products,
+        'recent_invoices': recent_invoices,
+
+        'main_total': main_total,
+        'p2_total': p2_total,
+        'auxa_total': auxa_total,
+        'auxb_total': auxb_total,
+
     })

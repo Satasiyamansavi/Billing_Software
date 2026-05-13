@@ -13,22 +13,26 @@ class ProductForm(forms.ModelForm):
         queryset=Product.objects.filter(parent__isnull=True),
         required=False,
         empty_label="-- Main Product (No Parent) --",
-        widget=forms.Select(attrs={'class': 'form-control mb-2'})       
+        widget=forms.Select(attrs={
+            'class': 'form-control mb-2'
+        })
     )
 
-    # 🔥 Branch (Stock માટે use થશે)
     branch = forms.ModelChoiceField(
         queryset=Branch.objects.all(),
-        required=False,   # 👈 IMPORTANT (edit સમયે error ના આવે)
+        required=False,
         widget=forms.Select(attrs={
             'class': 'form-control mb-2'
         })
     )
 
     class Meta:
+
         model = Product
+
         fields = [
             'name',
+            'section',
             'parent',
             'brand',
             'barcode',
@@ -39,11 +43,12 @@ class ProductForm(forms.ModelForm):
         ]
 
         widgets = {
+
             'name': forms.TextInput(attrs={
                 'class': 'form-control mb-2',
                 'placeholder': 'Product Name'
             }),
- 
+
             'parent': forms.Select(attrs={
                 'class': 'form-control mb-2'
             }),
@@ -69,32 +74,47 @@ class ProductForm(forms.ModelForm):
 
             'hsn': forms.TextInput(attrs={
                 'class': 'form-control mb-2',
-                'placeholder': 'HSN Code (e.g. 9403)'
+                'placeholder': 'HSN Code'
             }),
 
             'gst': forms.NumberInput(attrs={
                 'class': 'form-control mb-2',
-                'placeholder': 'GST % (e.g. 18)'
+                'placeholder': 'GST %'
+            }),
+
+            'section': forms.TextInput(attrs={
+                'class': 'form-control mb-2',
+                'placeholder': 'Section (70x16)'
             }),
         }
 
-        def save(self, commit=True):
-            obj = super().save(commit=False)
-    
-            # 🔥 MAIN PRODUCT AUTO RULE
-            if not obj.parent:
-                obj.parent = None
-    
-            if commit:
-                obj.save()
-    
-            return obj
+    # =========================
+    # SAVE METHOD
+    # =========================
 
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
+    def save(self, commit=True):
 
-        # 👉 always latest parent products
-            self.fields['parent'].queryset = Product.objects.filter(parent__isnull=True)
+        obj = super().save(commit=False)
+
+        if not obj.parent:
+            obj.parent = None
+
+        if commit:
+            obj.save()
+
+        return obj
+
+    # =========================
+    # INIT
+    # =========================
+
+    def __init__(self, *args, **kwargs):
+
+        super().__init__(*args, **kwargs)
+
+        self.fields['parent'].queryset = Product.objects.filter(
+            parent__isnull=True
+        )
 
 class GroupedModelChoiceField(forms.ModelChoiceField):
 
@@ -104,7 +124,6 @@ class GroupedModelChoiceField(forms.ModelChoiceField):
 
         grouped = []
 
-        # 🔥 Add default option
         grouped.append(('', '----- Select Product -----'))
 
         from itertools import groupby
@@ -119,7 +138,7 @@ class GroupedModelChoiceField(forms.ModelChoiceField):
 class PurchaseForm(forms.ModelForm):
 
     product = GroupedModelChoiceField(
-        queryset=Product.objects.filter(parent__isnull=False),
+        queryset=Product.objects.none(),
         widget=forms.Select(attrs={'class': 'form-control mb-2'}),
         empty_label="----- Select Product -----"
     )
@@ -145,9 +164,9 @@ class PurchaseForm(forms.ModelForm):
             }),
         }
 
-    # ✅ CORRECT PLACE
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # 🔥 ONLY SUB PRODUCTS
         self.fields['product'].queryset = Product.objects.filter(parent__isnull=False)
+
+

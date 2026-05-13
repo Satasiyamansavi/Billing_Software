@@ -3,7 +3,6 @@
 
 <h4 class="mb-3">📊 Dashboard</h4>
 
-<!-- FILTER -->
 <form method="get" class="mb-3">
     <select name="filter" onchange="this.form.submit()" class="form-select w-auto">
         <option value="daily" {% if selected_filter == 'daily' %}selected{% endif %}>Daily</option>
@@ -36,7 +35,6 @@
 canvas { max-height: 320px; }
 </style>
 
-<!-- SUMMARY -->
 <div class="row g-3 mb-3">
     <div class="col-md-2"><div class="card-box"><div class="small-text">Customers</div><div class="big-text">{{ customer_count }}</div></div></div>
     <div class="col-md-2"><div class="card-box"><div class="small-text">Products</div><div class="big-text">{{ product_count }}</div></div></div>
@@ -46,7 +44,6 @@ canvas { max-height: 320px; }
     <div class="col-md-2"><div class="card-box"><div class="small-text">Profit</div><div class="big-text">₹{{ profit_total }}</div></div></div>
 </div>
 
-<!-- CHARTS -->
 <div class="row g-3 mb-4">
 
     <div class="col-md-8">
@@ -63,7 +60,6 @@ canvas { max-height: 320px; }
 
 </div>
 
-<!-- TABLE -->
 <div class="card p-3 shadow-sm">
     <table class="table table-sm text-center mb-0">
         <thead>
@@ -89,7 +85,6 @@ canvas { max-height: 320px; }
     </table>
 </div>
 
-<!-- CHART JS -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <script>
@@ -99,7 +94,6 @@ const sales = {{ sales|safe }};
 const purchase = {{ purchase|safe }};
 const profit = {{ profit|safe }};
 
-// BAR CHART (ALL DATA)
 new Chart(document.getElementById('barChart'), {
     type: 'bar',
     data: {
@@ -130,7 +124,6 @@ new Chart(document.getElementById('barChart'), {
     }
 });
 
-// DONUT CHART
 new Chart(document.getElementById('donutChart'), {
     type: 'doughnut',
     data: {

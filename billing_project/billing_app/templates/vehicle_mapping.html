@@ -13,9 +13,18 @@
             <div class="col-md-5 mb-2">
                 <select name="product" class="form-control">
                     <option value="">Select Product</option>
-                    {% for p in products %}
-                        <option value="{{ p.id }}">{{ p.name }}</option>
+            
+                    {% for parent in parents %}
+                        <optgroup label="{{ parent.name }}">
+                            {% for sub in parent.subs.all %}
+                                <option value="{{ sub.id }}">
+                                    {{ sub.name }}
+                                </option>
+                            {% endfor %}
+            
+                        </optgroup>
                     {% endfor %}
+            
                 </select>
             </div>
 

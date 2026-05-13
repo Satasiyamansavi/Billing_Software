@@ -124,7 +124,6 @@ function setBranch(sel){
     });
 }
 
-// CUSTOMER
 function setCustomer(sel){
     let id = sel.value;
 
@@ -147,7 +146,6 @@ function setCustomer(sel){
     calcTotal();
 }
 
-// LOAD VARIANTS
 function loadVariants(sel){
     let productId = sel.value;
     let row = sel.closest('.item-row');
@@ -164,14 +162,12 @@ function loadVariants(sel){
     }
 }
 
-// SET PRICE FROM VARIANT
 function setPrice(sel){
     let row = sel.closest('.item-row');
     let price = sel.selectedOptions[0]?.dataset.price || 0;
 
     row.querySelector('.price').value = price;
 
-    // stock
     let branchId = document.querySelector('[name="branch"]').value;
     let variantId = sel.value;
 
@@ -181,7 +177,6 @@ function setPrice(sel){
     calcRow(row.querySelector('.qty'));
 }
 
-// ROW TOTAL
 function calcRow(input){
     let row = input.closest('.item-row');
     let price = parseFloat(row.querySelector('.price').value)||0;
@@ -190,7 +185,6 @@ function calcRow(input){
     calcTotal();
 }
 
-// GRAND TOTAL
 function calcTotal(){
     let total=0;
     document.querySelectorAll('.total').forEach(t=>{
@@ -203,7 +197,6 @@ function calcTotal(){
     document.getElementById('grand_total').innerText = total.toFixed(2);
 }
 
-// ADD ROW
 function addRow(){
     let row = document.querySelector('.item-row').cloneNode(true);
     row.querySelectorAll('input').forEach(i=>i.value="");
@@ -211,7 +204,6 @@ function addRow(){
     document.getElementById('items').appendChild(row);
 }
 
-// REMOVE
 function removeRow(btn){
     let row = btn.closest('.item-row');
     if(document.querySelectorAll('.item-row').length>1){

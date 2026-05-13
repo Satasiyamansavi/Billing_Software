@@ -38,13 +38,15 @@ class Product(models.Model):
     name = models.CharField(max_length=100)
     brand = models.ForeignKey(Brand, on_delete=models.SET_NULL, null=True, blank=True)
     barcode = models.CharField(max_length=100, blank=True, null=True)
-    price = models.FloatField()
+    price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     stock = models.IntegerField(default=0)
     low_stock_limit = models.IntegerField(default=5)
     hsn = models.CharField(max_length=20, blank=True, null=True)
     gst = models.FloatField(default=18)
     category = models.ForeignKey(Category, on_delete=models.CASCADE, null=True, blank=True)
     parent = models.ForeignKey('self',on_delete=models.CASCADE,null=True,blank=True,related_name='subs')
+    section = models.CharField(max_length=50, blank=True, null=True)
+    custom_price = models.FloatField(null=True, blank=True)
 
     def is_main(self):
         return self.parent is None
@@ -62,12 +64,18 @@ class Variant(models.Model):
         ("4", "4"),
         ("5", "5"),
         ("6", "6"),
+        ("7", "7"),
+        ("8", "8"),
+        ("9", "9"),
+        ("10", "10"),
     ]
 
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='variants')
     size = models.CharField(max_length=50, blank=True, null=True)
     column = models.CharField(max_length=10,choices=COLUMN_CHOICES,null=True,blank=True)
     price = models.FloatField()
+    group_no = models.IntegerField(default=1)
+
 
     def __str__(self):
         return f"{self.product.name} - {self.column}"
@@ -105,7 +113,7 @@ class Customer(models.Model):
         return letters + numbers + last
 
     def generate_gstin(self):
-        state_code = "24"  # Gujarat
+        state_code = "24"   
 
         if not self.pan:
             self.pan = self.generate_pan()
@@ -173,7 +181,7 @@ class Payment(models.Model):
 # PURCHASE
 class Purchase(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
-    branch = models.ForeignKey(Branch, on_delete=models.CASCADE, null=True, blank=True)  # 👈 ADD THIS
+    branch = models.ForeignKey(Branch, on_delete=models.CASCADE, null=True, blank=True)  
     supplier = models.ForeignKey(Supplier, on_delete=models.CASCADE, null=True, blank=True)
 
     quantity = models.IntegerField()
@@ -238,7 +246,7 @@ class Dealer(models.Model):
     user = models.OneToOneField(
         User,
         on_delete=models.CASCADE,
-        related_name='dealer'   # ✅ VERY IMPORTANT
+        related_name='dealer'   
     )
     phone = models.CharField(max_length=15)
 
@@ -279,7 +287,7 @@ class CustomerAssign(models.Model):
     salesman = models.ForeignKey(Salesman, on_delete=models.CASCADE)
 
     class Meta:
-        unique_together = ('customer', 'salesman')  # جلوگیری duplicate
+        unique_together = ('customer', 'salesman')  
 
     def __str__(self):
         return f"{self.customer.name} → {self.salesman.user.username}"

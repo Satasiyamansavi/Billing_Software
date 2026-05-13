@@ -6,7 +6,6 @@ from .models import UserProfile
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
     if created:
-        # 👉 username પ્રમાણે role set
         if instance.username == "Admin":
             role = "Admin"
         else:

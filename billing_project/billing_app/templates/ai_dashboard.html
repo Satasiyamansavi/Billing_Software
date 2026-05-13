@@ -1,73 +1,735 @@
 {% extends 'base.html' %}
-
 {% block content %}
 
-<h2 class="mb-4">🤖 AI Dashboard</h2>
+<link rel="stylesheet"
+href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<div class="row mb-4">
 
-    <div class="col-md-4">
-        <div style="background:#007bff; color:white; padding:20px; border-radius:10px;">
-            <h5>Total Products</h5>
-            <h2>{{ predictions|length }}</h2>
-        </div>
+<style>
+
+body{
+    background:#f5f7ff;
+    font-family:'Segoe UI',sans-serif;
+}
+
+.topbar{
+    background:#fff;
+    border-radius:18px;
+    padding:18px 25px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    box-shadow:0 4px 20px rgba(0,0,0,0.05);
+    margin-bottom:25px;
+}
+
+.search-box{
+    width:360px;
+    background:#f4f7ff;
+    border:none;
+    outline:none;
+    padding:12px 18px;
+    border-radius:12px;
+}
+
+.ai-btn{
+    border:1px solid #6c63ff;
+    background:white;
+    color:#6c63ff;
+    padding:10px 20px;
+    border-radius:12px;
+    font-weight:600;
+}
+
+.dashboard-title h2{
+    font-weight:700;
+    margin-bottom:5px;
+}
+
+.dashboard-title p{
+    color:#8b8b8b;
+}
+
+.dashboard-card{
+    background:white;
+    border-radius:20px;
+    padding:22px;
+    box-shadow:0 4px 20px rgba(0,0,0,0.05);
+    height:100%;
+}
+
+.top-stat{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+}
+
+.top-stat small{
+    color:#999;
+}
+
+.top-stat h2{
+    font-weight:700;
+}
+
+.icon-box{
+    width:58px;
+    height:58px;
+    border-radius:15px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:white;
+    font-size:22px;
+}
+
+.bg1{
+    background:linear-gradient(135deg,#6a5cff,#8d61ff);
+}
+
+.bg2{
+    background:linear-gradient(135deg,#28c76f,#16a34a);
+}
+
+.bg3{
+    background:linear-gradient(135deg,#ff6b6b,#ff8e53);
+}
+
+.bg4{
+    background:linear-gradient(135deg,#4f46e5,#3b82f6);
+}
+
+.chart-box{
+    height:300px;
+    border-radius:18px;
+    background:linear-gradient(180deg,#eef2ff,#ffffff);
+    margin-top:18px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+
+.insight-box{
+    background:#f5f3ff;
+    border-radius:18px;
+    padding:20px;
+    height:100%;
+}
+
+.insight-item{
+    background:white;
+    border-radius:14px;
+    padding:14px;
+    margin-bottom:14px;
+    display:flex;
+    align-items:center;
+    gap:12px;
+}
+
+.insight-icon{
+    width:40px;
+    height:40px;
+    border-radius:12px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:white;
+}
+
+.red{
+    background:#ef4444;
+}
+
+.green{
+    background:#22c55e;
+}
+
+.orange{
+    background:#f59e0b;
+}
+
+.data-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:14px 0;
+    border-bottom:1px solid #f1f1f1;
+}
+
+.data-row:last-child{
+    border-bottom:none;
+}
+
+.badge-paid{
+    background:#dcfce7;
+    color:#16a34a;
+    padding:6px 14px;
+    border-radius:30px;
+    font-size:13px;
+}
+
+.badge-alert{
+    background:#fee2e2;
+    color:#dc2626;
+    padding:6px 14px;
+    border-radius:30px;
+    font-size:13px;
+}
+
+.badge-warning{
+    background:#fef3c7;
+    color:#d97706;
+    padding:6px 14px;
+    border-radius:30px;
+    font-size:13px;
+}
+
+</style>
+
+<div class="topbar">
+
+    <h3 class="fw-bold mb-0">
+        Dashboard
+    </h3>
+
+    <div class="d-flex align-items-center gap-3">
+
+        <input type="text"
+               class="search-box"
+               placeholder="🔍 Search here...">
+
+        <button class="ai-btn">
+            🤖 AI Assistant
+        </button>
+
     </div>
 
-    <div class="col-md-4">
-        <div style="background:#dc3545; color:white; padding:20px; border-radius:10px;">
-            <h5>Stock Alerts</h5>
-            <h2>
-                {% for p in predictions %}
-                    {% if p.stock < p.prediction %}1{% endif %}
-                {% endfor %}
-            </h2>
+</div>
+
+<div class="dashboard-title mb-4">
+
+    <h2>
+        Good Morning, Admin! 👋
+    </h2>
+
+    <p>
+        Here's what's happening with your business today.
+    </p>
+
+</div>
+
+<div class="row g-4 mb-4">
+
+    <div class="col-md-3">
+
+        <div class="dashboard-card">
+
+            <div class="top-stat">
+
+                <div>
+
+                    <small>Total Sales</small>
+
+                    <h2>
+                        ₹{{ total_sales }}
+                    </h2>
+
+                </div>
+
+                <div class="icon-box bg1">
+                    <i class="fa fa-chart-column"></i>
+                </div>
+
+            </div>
+
         </div>
+
     </div>
 
-    <div class="col-md-4">
-        <div style="background:#28a745; color:white; padding:20px; border-radius:10px;">
-            <h5>Status</h5>
-            <h2>Active</h2>
+    <div class="col-md-3">
+
+        <div class="dashboard-card">
+
+            <div class="top-stat">
+
+                <div>
+
+                    <small>Total Invoices</small>
+
+                    <h2>
+                        {{ total_invoices }}
+                    </h2>
+
+                </div>
+
+                <div class="icon-box bg4">
+                    <i class="fa fa-file-invoice"></i>
+                </div>
+
+            </div>
+
         </div>
+
+    </div>
+
+    <div class="col-md-3">
+
+        <div class="dashboard-card">
+
+            <div class="top-stat">
+
+                <div>
+
+                    <small>Total Received</small>
+
+                    <h2>
+                        ₹{{ total_received }}
+                    </h2>
+
+                </div>
+
+                <div class="icon-box bg2">
+                    <i class="fa fa-wallet"></i>
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="col-md-3">
+
+        <div class="dashboard-card">
+
+            <div class="top-stat">
+
+                <div>
+
+                    <small>Total Due</small>
+
+                    <h2>
+                        ₹{{ total_due }}
+                    </h2>
+
+                </div>
+
+                <div class="icon-box bg3">
+                    <i class="fa fa-credit-card"></i>
+                </div>
+
+            </div>
+
+        </div>
+
     </div>
 
 </div>
 
-<div class="mb-4 p-3 bg-white shadow rounded">
-    <h5>⚠️ Stock Alerts</h5>
+<div class="row g-4 mb-4">
 
-    <ul>
-        {% for p in predictions %}
-            {% if p.stock < p.prediction %}
-                <li style="color:red;">
-                    {{ p.name }} → Restock Needed
-                </li>
-            {% endif %}
-        {% empty %}
-            <li>No alerts</li>
-        {% endfor %}
-    </ul>
+    <div class="col-lg-8">
+    
+        <div class="dashboard-card">
+    
+            <div class="d-flex justify-content-between align-items-center mb-3">
+    
+                <h5 class="fw-bold">
+                    📈 Sales Overview
+                </h5>
+    
+                <span class="text-muted">
+                    Last 7 Days
+                </span>
+    
+            </div>
+    
+            <div class="chart-box"
+                 style="height:300px;">
+    
+                <canvas id="salesChart"></canvas>
+    
+            </div>
+    
+        </div>
+    
+    </div>
+
+    <div class="col-lg-4">
+
+        <div class="insight-box">
+
+            <h5 class="fw-bold mb-4">
+                🤖 AI Insights
+            </h5>
+
+            {% for p in predictions %}
+                {% if p.stock < p.prediction %}
+
+                <div class="insight-item">
+
+                    <div class="insight-icon red">
+                        <i class="fa fa-bell"></i>
+                    </div>
+
+                    <div>
+                        <b>{{ p.name }}</b><br>
+
+                        <small class="text-muted">
+                            Restock needed
+                        </small>
+                    </div>
+
+                </div>
+
+                {% endif %}
+            {% empty %}
+
+            <div class="insight-item">
+
+                <div class="insight-icon green">
+                    <i class="fa fa-check"></i>
+                </div>
+
+                <div>
+                    No Alerts Found
+                </div>
+
+            </div>
+
+            {% endfor %}
+
+        </div>
+
+    </div>
+
 </div>
 
-<div class="p-3 bg-white shadow rounded">
-    <h5>🔥 Top Demand Products</h5>
+<div class="row g-4">
 
-    {% for p in predictions|dictsortreversed:"prediction"|slice:":3" %}
-        <p>
-            <b>{{ p.name }}</b> → {{ p.prediction }}
-        </p>
-    {% endfor %}
+    <div class="col-lg-6">
+
+        <div class="dashboard-card">
+
+            <div class="d-flex justify-content-between mb-3">
+
+                <h5 class="fw-bold">
+                    🔥 Top Demand Products
+                </h5>
+
+                <span class="text-primary">
+                    View All
+                </span>
+
+            </div>
+
+            {% for p in top_products %}
+
+            <div class="data-row">
+
+                <div>
+                    <b>{{ p.product__name }}</b>
+                </div>
+
+                <span class="badge-paid">
+                    {{ p.qty }}
+                </span>
+
+            </div>
+
+            {% endfor %}
+
+        </div>
+
+    </div>
+
+    <div class="col-lg-6">
+
+        <div class="dashboard-card">
+
+            <div class="d-flex justify-content-between mb-3">
+
+                <h5 class="fw-bold">
+                    📦 Auto Reorder Suggestions
+                </h5>
+
+                <span class="text-primary">
+                    AI Powered
+                </span>
+
+            </div>
+
+            {% for a in alerts %}
+
+            <div class="data-row">
+
+                <div>
+                    <b>{{ a.name }}</b>
+                </div>
+
+                <span class="badge-warning">
+                    {{ a.required }} Units
+                </span>
+
+            </div>
+
+            {% empty %}
+
+            <div class="data-row">
+                No reorder needed
+            </div>
+
+            {% endfor %}
+
+        </div>
+
+    </div>
+
 </div>
 
-<div class="p-3 bg-white shadow rounded mt-4">
-    <h5>📦 Auto Reorder Suggestions</h5>
+<div class="row g-4">
 
-    {% for a in alerts %}
-        <p>
-            <b>{{ a.name }}</b> → Order <b>{{ a.required }}</b> units
-        </p>
-    {% empty %}
-        <p>No reorder needed</p>
-    {% endfor %}
+<div class="col-lg-4">
+
+    <div class="dashboard-card">
+
+        <div class="d-flex justify-content-between mb-3">
+
+            <h5 class="fw-bold">
+                Sales by Category
+            </h5>
+
+            <span class="text-primary">
+                Live
+            </span>
+
+        </div>
+
+        <div class="row align-items-center">
+
+            <div class="col-6">
+
+                <div style="height:250px;">
+                    <canvas id="categoryChart"></canvas>
+                </div>
+
+            </div>
+
+            <div class="col-6">
+
+                <div class="mb-3 d-flex justify-content-between">
+
+                    <div>
+                        <span class="badge bg-primary">
+                            MAIN
+                        </span>
+                    </div>
+
+                    <b>
+                        ₹{{ main_total }}
+                    </b>
+
+                </div>
+
+                <div class="mb-3 d-flex justify-content-between">
+
+                    <div>
+                        <span class="badge bg-success">
+                            2P
+                        </span>
+                    </div>
+
+                    <b>
+                        ₹{{ p2_total }}
+                    </b>
+
+                </div>
+
+                <div class="mb-3 d-flex justify-content-between">
+
+                    <div>
+                        <span class="badge bg-warning text-dark">
+                            AUXA
+                        </span>
+                    </div>
+
+                    <b>
+                        ₹{{ auxa_total }}
+                    </b>
+
+                </div>
+
+                <div class="mb-3 d-flex justify-content-between">
+
+                    <div>
+                        <span class="badge bg-danger">
+                            AUXB
+                        </span>
+                    </div>
+
+                    <b>
+                        ₹{{ auxb_total }}
+                    </b>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
 </div>
+
+
+<script>
+
+const ctx = document.getElementById('salesChart');
+
+new Chart(ctx, {
+
+    type: 'line',
+
+    data: {
+
+        labels: [
+            'Mon',
+            'Tue',
+            'Wed',
+            'Thu',
+            'Fri',
+            'Sat',
+            'Sun'
+        ],
+
+        datasets: [{
+
+            label: 'Sales',
+
+            data: [
+                12000,
+                19000,
+                15000,
+                22000,
+                18000,
+                26000,
+                30000
+            ],
+
+            borderColor: '#6a5cff',
+
+            backgroundColor: 'rgba(106,92,255,0.15)',
+
+            fill: true,
+
+            tension: 0.4,
+
+            pointBackgroundColor: '#6a5cff',
+
+            pointRadius: 5
+
+        }]
+
+    },
+
+    options: {
+
+        responsive: true,
+
+        maintainAspectRatio: false,
+
+        plugins: {
+
+            legend: {
+                display: false
+            }
+
+        },
+
+        scales: {
+
+            y: {
+
+                beginAtZero: true,
+
+                grid: {
+                    color: '#eee'
+                }
+
+            },
+
+            x: {
+
+                grid: {
+                    display: false
+                }
+
+            }
+
+        }
+
+    }
+
+});
+
+const categoryCtx = document.getElementById('categoryChart');
+
+new Chart(categoryCtx, {
+
+    type: 'doughnut',
+
+    data: {
+
+        labels: [
+            'MAIN',
+            '2P',
+            'AUXA',
+            'AUXB'
+        ],
+
+        datasets: [{
+
+            data: [
+                {{ main_total|default:0 }},
+                {{ p2_total|default:0 }},
+                {{ auxa_total|default:0 }},
+                {{ auxb_total|default:0 }}
+            ],
+
+            backgroundColor: [
+                '#6a5cff',
+                '#22c55e',
+                '#f59e0b',
+                '#ef4444'
+            ],
+
+            borderWidth: 0
+
+        }]
+
+    },
+
+    options: {
+
+        responsive: true,
+
+        maintainAspectRatio: false,
+
+        cutout: '68%',
+
+        plugins: {
+
+            legend: {
+                display: false
+            }
+
+        }
+
+    }
+
+});
+
+</script>
+
 {% endblock %}

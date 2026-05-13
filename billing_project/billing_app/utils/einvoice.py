@@ -38,7 +38,5 @@ def generate_einvoice_json(invoice, items):
 
     return data
 
-
-# 🔥 FAKE IRN (Demo)
 def generate_irn(invoice_id):
     return f"IRN{invoice_id}{datetime.now().timestamp()}"

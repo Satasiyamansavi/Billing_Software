@@ -3,7 +3,6 @@
 
 <h3 class="mb-4">📊 Profit Dashboard</h3>
 
-<!-- FILTER -->
 <form method="get" class="mb-3">
     <select name="filter" onchange="this.form.submit()" class="form-select w-auto">
         <option value="daily" {% if selected_filter == 'daily' %}selected{% endif %}>Daily</option>
@@ -13,7 +12,6 @@
     </select>
 </form>
 
-<!-- TOTAL CARDS -->
 <div class="row mb-4">
 
     <div class="col-md-4">
@@ -40,7 +38,6 @@
 
 </div>
 
-<!-- TABLE -->
 <div class="card shadow p-3">
 
     <h5 class="mb-3">📅 Breakdown</h5>
@@ -72,7 +69,6 @@
 
 </div>
 
-<!-- SUMMARY -->
 <div class="card shadow p-3 mt-4">
     <h5>📌 Summary</h5>
 
