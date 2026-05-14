@@ -2,26 +2,14 @@
   "version": 2,
   "builds": [
     {
-      "src": "billing_project/wsgi.py",
+      "src": "billing_projet/wsgi.py",
       "use": "@vercel/python"
-    },
-    {
-      "src": "build_files.sh",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "staticfiles"
-      }
     }
   ],
-
   "routes": [
     {
-      "src": "/static/(.*)",
-      "dest": "/static/$1"
-    },
-    {
       "src": "/(.*)",
-      "dest": "billing_project/wsgi.py"
+      "dest": "billing_projet/wsgi.py"
     }
   ]
 }
