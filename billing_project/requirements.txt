@@ -4,5 +4,5 @@ whitenoise
 pandas
 numpy
 reportlab
-xhtml2pdf
-weasyprint
+pillow
+requests
