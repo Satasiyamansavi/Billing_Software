@@ -38,6 +38,8 @@ def is_dealer_or_admin(user):
 
 # 🔐 LOGIN
 def login_view(request):
+
+    
     if request.method == "POST":
         user = authenticate(
             username=request.POST['username'],
@@ -75,7 +77,8 @@ def login_view(request):
         else:
             return HttpResponse("Invalid Username or Password")
 
-    return render(request, 'login.html')
+    # return render(request, 'login.html')
+    return HttpResponse("Django Working on Vercel")
 
 
 def logout_view(request):
