@@ -2,14 +2,14 @@
   "version": 2,
   "builds": [
     {
-      "src": "billing_projet/wsgi.py",
+      "src": "billing_project/wsgi.py",
       "use": "@vercel/python"
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "billing_projet/wsgi.py"
+      "dest": "billing_project/wsgi.py"
     }
   ]
 }
